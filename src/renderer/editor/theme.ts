@@ -178,6 +178,13 @@ const editorTheme = EditorView.theme({
     fontVariationSettings: 'var(--vf-ui)'
   },
 
+  '.fs-nod img': {
+    display: 'inline-block',
+    height: '1.05em',
+    width: 'auto',
+    verticalAlign: '-0.15em'
+  },
+
   /* ---- Horizontal rules: an actual hairline off the active line ---- */
   '.fs-hr': {
     display: 'inline-block',
