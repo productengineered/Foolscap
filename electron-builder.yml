@@ -1,0 +1,71 @@
+# Packaging (Phase 5). Local unsigned build: `pnpm pack:app` (--dir) or
+# `pnpm dist`. Signing and notarization activate automatically when the CI
+# secrets are present — see .github/workflows/release.yml.
+appId: com.foolscap.app
+productName: Foolscap
+copyright: © 2026 Seánan
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**
+  - package.json
+extraResources:
+  # The PDF exporter embeds these; require.resolve works in dev but not in
+  # the packaged app, so they ship as plain resources (src/main/export/pdf.ts
+  # checks process.resourcesPath/fonts first).
+  - from: node_modules/@fontsource-variable/recursive/files/recursive-latin-full-normal.woff2
+    to: fonts/recursive-latin-full-normal.woff2
+  - from: node_modules/@fontsource-variable/fraunces/files/fraunces-latin-full-normal.woff2
+    to: fonts/fraunces-latin-full-normal.woff2
+  - from: fonts/ioskeley
+    to: fonts/ioskeley
+fileAssociations:
+  - ext: [md, markdown, mdx]
+    name: Markdown
+    description: Markdown document
+    role: Editor
+    rank: Alternate
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip # electron-updater feeds from the zip
+      arch: [arm64, x64]
+dmg:
+  # Quiet drag-to-Applications window; no fancy background.
+  contents:
+    - x: 130
+      y: 180
+    - x: 410
+      y: 180
+      type: link
+      path: /Applications
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+  # Azure Trusted Signing (ULTRAPLAN §7): configure via env in CI —
+  # AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET and
+  # win.azureSignOptions. Unsigned local builds work but SmartScreen-flag.
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+linux:
+  icon: build/icon.png
+  category: Office
+  maintainer: sean@noisebeard.com
+  target: [AppImage, deb, rpm]
+publish:
+  # Releases are the update-notifier's feed (src/main/update-check.ts) and
+  # will feed electron-updater too once a Developer ID signs the build.
+  provider: github
+  owner: seamoss
+  repo: Foolscap
