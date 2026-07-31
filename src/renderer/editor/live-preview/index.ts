@@ -21,6 +21,7 @@ import { collectImages } from './images'
 import { collectLinks, linkClickHandler } from './links'
 import { collectListIndents, collectListBullets } from './lists'
 import { collectMarks, selectionTouches } from './marks'
+import { collectNods } from './nod'
 import { collectQuote } from './quote'
 import { collectRules } from './rules'
 import { collectTable } from './tables'
@@ -140,6 +141,7 @@ export function collectActiveSpecs(
         collectRules(node, ctx)
       }
     })
+    collectNods(tree, ctx)
   }
   const block = glyphForPos(tree, doc, selection.main.head)
   if (block) {
