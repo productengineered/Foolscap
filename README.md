@@ -54,6 +54,11 @@ so the first launch is right-click → **Open**. Foolscap checks Releases for
 newer versions and mentions them in a single quiet toast; it never installs
 anything itself.
 
+If macOS calls a download "damaged", it's a pre-0.5.1 build (they lacked
+the ad-hoc signature Apple Silicon insists on) — grab a fresh DMG, or run
+`xattr -cr /Applications/Foolscap.app` to clear quarantine on the one you
+have.
+
 ## Building
 
 ```

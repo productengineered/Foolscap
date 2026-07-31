@@ -63,6 +63,7 @@ linux:
   category: Office
   maintainer: sean@noisebeard.com
   target: [AppImage, deb, rpm]
+afterPack: ./scripts/ad-hoc-sign.cjs
 publish:
   # Releases are the update-notifier's feed (src/main/update-check.ts) and
   # will feed electron-updater too once a Developer ID signs the build.
