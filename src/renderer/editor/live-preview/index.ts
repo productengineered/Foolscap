@@ -237,6 +237,7 @@ const activePlugin = ViewPlugin.fromClass(
         update.docChanged ||
         update.selectionSet ||
         update.viewportChanged ||
+        update.state.facet(docDirFacet) !== update.startState.facet(docDirFacet) ||
         syntaxTree(update.state) !== syntaxTree(update.startState)
       ) {
         this.decorations = this.build(update.view)
