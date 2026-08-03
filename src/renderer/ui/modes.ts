@@ -1,4 +1,5 @@
 import { EditorView, type ViewUpdate } from '@codemirror/view'
+import { tokenMs } from './tokens'
 
 /* Writing modes and the theme switch. All toggles, no chrome (§4.4):
  * typewriter and focus are states of the editor, the word count is a corner
@@ -260,6 +261,9 @@ export class Modes {
     if (!this.wordCount) return
     this.countEl.classList.add('visible')
     window.clearTimeout(this.fadeTimer)
-    this.fadeTimer = window.setTimeout(() => this.countEl.classList.remove('visible'), 2000)
+    this.fadeTimer = window.setTimeout(
+      () => this.countEl.classList.remove('visible'),
+      tokenMs('--dur-wordcount-peek')
+    )
   }
 }

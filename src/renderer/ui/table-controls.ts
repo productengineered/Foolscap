@@ -9,6 +9,7 @@ import {
   parseTable,
   type TableModel
 } from '../editor/table-model'
+import { tokenMs, tokenPx } from './tokens'
 
 /* Phase 4 column controls: a quiet chip bar that appears above a table
  * while the pointer is over it, acting on the hovered column. All actions
@@ -68,15 +69,15 @@ export class TableControls {
     }
     const coords = this.view.coordsAtPos(this.tableFrom)
     if (!coords) return
-    this.bar.style.left = `${Math.max(8, coords.left)}px`
-    this.bar.style.top = `${coords.top - this.bar.offsetHeight - 6}px`
+    this.bar.style.left = `${Math.max(tokenPx('--edge-inset'), coords.left)}px`
+    this.bar.style.top = `${coords.top - this.bar.offsetHeight - tokenPx('--table-bar-gap')}px`
     const label = this.bar.querySelector('.table-controls-col')
     if (label) label.textContent = `col ${this.column + 1}`
   }
 
   private scheduleHide(): void {
     window.clearTimeout(this.hideTimer)
-    this.hideTimer = window.setTimeout(() => this.hide(), 350)
+    this.hideTimer = window.setTimeout(() => this.hide(), tokenMs('--dur-table-bar-hide'))
   }
 
   private hide(): void {
