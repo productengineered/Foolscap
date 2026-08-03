@@ -4,11 +4,11 @@ import { describe, expect, it } from 'vitest'
 import { fenceLang, fenceTestHooks, keyFor } from './code-fence'
 import { collectConstructSpecs, type DecoSpec } from './index'
 
-function specs(doc: string): DecoSpec[] {
+function specs(doc: string, ranges?: { from: number; to: number }[]): DecoSpec[] {
   return collectConstructSpecs(
     markdownLanguage.parser.parse(doc),
     Text.of(doc.split('\n')),
-    [{ from: 0, to: doc.length }]
+    ranges ?? [{ from: 0, to: doc.length }]
   )
 }
 
@@ -74,6 +74,37 @@ describe('construct 6: code fences', () => {
     const styled = all.filter((s) => s.kind === 'mark' && s.style)
     expect(styled).toEqual([
       { kind: 'mark', from: 12, to: 17, style: 'color: var(--shiki-token-keyword)' }
+    ])
+    fenceTestHooks.cache.clear()
+  })
+
+  it('token marks are clamped to the visible range', () => {
+    const doc = '```js\nconst x = 1\nconst y = 2\n```'
+    const content = 'const x = 1\nconst y = 2'
+    fenceTestHooks.cache.set(keyFor('js', content), [
+      { start: 0, end: 5, color: 'var(--shiki-token-keyword)' },
+      { start: 12, end: 17, color: 'var(--shiki-token-keyword)' }
+    ])
+    // Only the fence's first code line is visible: the second span is offscreen.
+    const styled = specs(doc, [{ from: 0, to: 17 }]).filter((s) => s.kind === 'mark' && s.style)
+    expect(styled.map((s) => [s.from, s.to])).toEqual([[6, 11]])
+    fenceTestHooks.cache.clear()
+  })
+
+  it('a fence overlapping two visible ranges emits each span once, not twice', () => {
+    const doc = '```js\nconst x = 1\nconst y = 2\n```'
+    const content = 'const x = 1\nconst y = 2'
+    fenceTestHooks.cache.set(keyFor('js', content), [
+      { start: 0, end: 5, color: 'var(--shiki-token-keyword)' },
+      { start: 12, end: 17, color: 'var(--shiki-token-keyword)' }
+    ])
+    const styled = specs(doc, [
+      { from: 0, to: 17 },
+      { from: 18, to: doc.length }
+    ]).filter((s) => s.kind === 'mark' && s.style)
+    expect(styled.map((s) => [s.from, s.to])).toEqual([
+      [6, 11],
+      [18, 23]
     ])
     fenceTestHooks.cache.clear()
   })

@@ -102,13 +102,18 @@ export function collectFence(node: SyntaxNodeRef, ctx: CollectCtx): void {
   const content = ctx.doc.sliceString(code.from, code.to)
   const spans = cache.get(keyFor(lang, content))
   if (!spans) return
+  // Clamped like the line decos above: a giant fence with one visible line
+  // must not rebuild thousands of offscreen marks (and a fence overlapping
+  // two visible ranges is entered once per range — unclamped, every span
+  // would be pushed twice).
   for (const span of spans) {
-    ctx.push({
-      kind: 'mark',
-      from: code.from + span.start,
-      to: code.from + span.end,
-      style: `color: ${span.color}`
-    })
+    const from = Math.max(code.from + span.start, ctx.from)
+    const to = Math.min(code.from + span.end, ctx.to)
+    if (from >= to) {
+      if (code.from + span.start >= ctx.to) break // spans are start-sorted
+      continue
+    }
+    ctx.push({ kind: 'mark', from, to, style: `color: ${span.color}` })
   }
 }
 
