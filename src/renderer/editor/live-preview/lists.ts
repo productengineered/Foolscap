@@ -1,3 +1,4 @@
+import { countColumn } from '@codemirror/state'
 import type { SyntaxNodeRef } from '@lezer/common'
 import type { ActiveCtx, CollectCtx } from './index'
 import { selectionTouches } from './marks'
@@ -30,8 +31,16 @@ function isOrderedMark(node: SyntaxNodeRef): boolean {
 export function collectListIndents(node: SyntaxNodeRef, ctx: CollectCtx): void {
   if (node.name !== 'ListMark') return
   const line = ctx.doc.lineAt(node.from)
-  // Content column: everything left of it is indent + marker + one space.
-  const width = node.to - line.from + 1
+  // Content column: indent + marker + the marker's actual trailing gap —
+  // CommonMark allows 1-4 spaces or a tab, not always one space — counted
+  // in tab-aware columns so tab-indented items align too.
+  const markerEnd = node.to - line.from
+  const rest = line.text.slice(markerEnd)
+  const gap = rest.length - rest.replace(/^[ \t]+/, '').length
+  const width =
+    gap === 0
+      ? countColumn(line.text, ctx.tabSize, markerEnd) + 1
+      : countColumn(line.text, ctx.tabSize, markerEnd + gap)
   ctx.push({
     kind: 'line',
     at: line.from,

@@ -64,6 +64,7 @@ export interface CollectCtx {
   /* Visible-range clamp for multi-line constructs. */
   from: number
   to: number
+  tabSize: number
   push(spec: DecoSpec): void
 }
 
@@ -78,7 +79,8 @@ type VisibleRange = { from: number; to: number }
 export function collectConstructSpecs(
   tree: Tree,
   doc: Text,
-  visible: readonly VisibleRange[]
+  visible: readonly VisibleRange[],
+  tabSize = 4
 ): DecoSpec[] {
   const specs: DecoSpec[] = []
   for (const range of visible) {
@@ -86,6 +88,7 @@ export function collectConstructSpecs(
       doc,
       from: range.from,
       to: range.to,
+      tabSize,
       push: (spec) => specs.push(spec)
     }
     tree.iterate({
@@ -111,7 +114,8 @@ export function collectActiveSpecs(
   doc: Text,
   selection: EditorSelection,
   visible: readonly VisibleRange[],
-  docDir: string | null = null
+  docDir: string | null = null,
+  tabSize = 4
 ): DecoSpec[] {
   const specs: DecoSpec[] = []
   const seen = new Set<number>()
@@ -128,6 +132,7 @@ export function collectActiveSpecs(
       doc,
       from: range.from,
       to: range.to,
+      tabSize,
       selection,
       docDir,
       push: (spec) => specs.push(spec)
@@ -217,7 +222,12 @@ const constructPlugin = ViewPlugin.fromClass(
     private build(view: EditorView): DecorationSet {
       ensureFenceTokens(view)
       return toDecorations(
-        collectConstructSpecs(syntaxTree(view.state), view.state.doc, view.visibleRanges)
+        collectConstructSpecs(
+          syntaxTree(view.state),
+          view.state.doc,
+          view.visibleRanges,
+          view.state.tabSize
+        )
       )
     }
   },
@@ -251,7 +261,8 @@ const activePlugin = ViewPlugin.fromClass(
           view.state.doc,
           view.state.selection,
           view.visibleRanges,
-          view.state.facet(docDirFacet)
+          view.state.facet(docDirFacet),
+          view.state.tabSize
         )
       )
     }
