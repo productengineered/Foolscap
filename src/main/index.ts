@@ -173,7 +173,9 @@ if (!gotLock) {
     // GitHub Release and offer one quiet toast in the focused window.
     scheduleUpdateCheck((info) => {
       const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-      if (win && !win.isDestroyed()) win.webContents.send(IPC.updateAvailable, info)
+      if (!win || win.isDestroyed()) return false
+      win.webContents.send(IPC.updateAvailable, info)
+      return true
     })
   })
 
