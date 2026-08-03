@@ -26,6 +26,7 @@
   --weight-ui: 500;
   --weight-code: 400;
   --weight-heading: 600;
+  --weight-strong: 700;
   /* Receded syntax marks shed weight as well as color (§4.3). */
   --weight-mark-ghost: 320;
 
@@ -56,6 +57,7 @@
 
   /* ---- Chrome ---- */
   --titlebar-height: 32px;
+  --cursor-width: 2px;
   --radius-ui: 6px;
   --radius-inline: 4px;
   /* Text inset from the edge of sunk fills (fences, blockquotes). */

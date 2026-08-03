@@ -37,7 +37,7 @@ const editorTheme = EditorView.theme({
   },
   '.cm-cursor': {
     borderLeftColor: 'var(--accent)',
-    borderLeftWidth: '2px'
+    borderLeftWidth: 'var(--cursor-width)'
   },
   /* drawSelection puts its layer behind the content (inline z-index -2),
    * where opaque line fills — fences, quotes — swallow it. Lift it above the
@@ -212,7 +212,7 @@ const editorTheme = EditorView.theme({
  * fallback for constructs whose live preview isn't built yet (lists, links). */
 const markdownHighlight = HighlightStyle.define([
   { tag: tags.emphasis, fontStyle: 'italic' },
-  { tag: tags.strong, fontWeight: '700' },
+  { tag: tags.strong, fontWeight: 'var(--weight-strong)' },
   { tag: tags.strikethrough, textDecoration: 'line-through' },
   {
     tag: tags.monospace,
