@@ -155,8 +155,11 @@ function toggleHelp(): void {
 function loadCustomTheme(): void {
   void window.foolscap.loadCustomTheme().then((css) => {
     if (css === null) return
-    applyCustomTheme(css)
-    showToast('Custom theme applied — define your palette under :root[data-theme=\'custom\'].')
+    if (applyCustomTheme(css)) {
+      showToast('Custom theme applied — define your palette under :root[data-theme=\'custom\'].')
+    } else {
+      showToast('Custom theme applied, but too large to save — it won’t survive a relaunch.')
+    }
   })
 }
 
