@@ -33,6 +33,7 @@ import './styles/base.css'
 import { openSearchPanel } from '@codemirror/search'
 import { EditorView } from '@codemirror/view'
 import { renderMarkdown } from '../shared/markdown'
+import { DROPPABLE_FILE } from '../shared/types'
 import { createEditor } from './editor/setup'
 import helpMd from './help.md?raw'
 import {
@@ -223,13 +224,12 @@ const palette = new Palette(paletteCommands, () => editor.view.focus())
 
 /* Drag a markdown file onto the window to open it here — with the same
  * unsaved-changes guard as any other open. */
-const DROPPABLE = /\.(md|markdown|mdx|txt)$/i
 window.addEventListener('dragover', (e) => e.preventDefault())
 window.addEventListener('drop', (e) => {
   e.preventDefault()
   const file = e.dataTransfer?.files[0]
   if (!file) return
-  if (!DROPPABLE.test(file.name)) {
+  if (!DROPPABLE_FILE.test(file.name)) {
     showToast('Foolscap opens markdown files (.md, .markdown, .mdx, .txt).')
     return
   }

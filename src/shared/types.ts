@@ -14,6 +14,10 @@ export interface DocPayload {
 
 export type ConflictChoice = 'reload' | 'keep'
 
+/* File types Foolscap opens via drag-and-drop. One definition for both the
+ * renderer's drop filter and main's openDropped validation. */
+export const DROPPABLE_FILE = /\.(md|markdown|mdx|txt)$/i
+
 /* Sent after a successful save — Save As changes both. */
 export interface SavedPayload {
   path: string | null
