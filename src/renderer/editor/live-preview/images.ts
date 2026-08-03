@@ -9,14 +9,19 @@ import { selectionTouches } from './marks'
 
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i
 
+/* Per-segment, not encodeURI: the target is a literal path, and a legal
+ * filename like photo#1.png must not read as a URL fragment. */
+const encodePath = (path: string): string =>
+  path.split('/').map(encodeURIComponent).join('/')
+
 /* Resolve an image target against the document's directory. Returns null
  * when there's no way to resolve it (relative path, unsaved document). */
 export function resolveImageSrc(target: string, docDir: string | null): string | null {
   if (target === '') return null
   if (SCHEME.test(target)) return target
-  if (target.startsWith('/')) return `file://${encodeURI(target)}`
+  if (target.startsWith('/')) return `file://${encodePath(target)}`
   if (!docDir) return null
-  return `file://${encodeURI(`${docDir}/${target}`)}`
+  return `file://${encodePath(`${docDir}/${target}`)}`
 }
 
 export function collectImages(node: SyntaxNodeRef, ctx: ActiveCtx): void {
