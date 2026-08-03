@@ -1,7 +1,34 @@
-import { BrowserWindow, nativeTheme } from 'electron'
+import { app, shell, BrowserWindow, nativeTheme } from 'electron'
 import { join } from 'node:path'
 import { attachContextMenu } from './context-menu'
+import { OPENABLE_SCHEMES } from './ipc'
 import { restoreWindowBounds, trackWindowBounds } from './window-state'
+
+/* No webContents may open child windows or navigate away — ever. The click
+ * handler in preview covers left-clicks only; a middle-click's auxclick
+ * would otherwise reach Chromium's default new-window disposition, and the
+ * child window Electron creates inherits the opener's webPreferences —
+ * preload included — handing window.foolscap to an arbitrary page. Safe
+ * link targets go to the system browser instead; everything else is dropped.
+ * will-navigate ignores main-process loadFile/loadURL, so denying it (bar
+ * dev-server HMR reloads) cannot break the app's own loads. */
+export function installContentsGuards(): void {
+  app.on('web-contents-created', (_e, contents) => {
+    contents.setWindowOpenHandler(({ url }) => {
+      try {
+        if (OPENABLE_SCHEMES.has(new URL(url).protocol)) void shell.openExternal(url)
+      } catch {
+        // not a parseable URL — drop it
+      }
+      return { action: 'deny' }
+    })
+    contents.on('will-navigate', (event, url) => {
+      const dev = process.env['ELECTRON_RENDERER_URL']
+      if (dev && url.startsWith(dev)) return
+      event.preventDefault()
+    })
+  })
+}
 
 // Mirrors --paper in src/renderer/styles/tokens.css. The main process cannot
 // read CSS custom properties, and the window needs a background before the

@@ -8,7 +8,7 @@ import { DocumentSession } from './session'
 import { clearSession, loadSession, saveSession, type SessionEntry } from './session-store'
 import { IPC } from '../shared/types'
 import { scheduleUpdateCheck } from './update-check'
-import { createWindow } from './window'
+import { createWindow, installContentsGuards } from './window'
 
 const gotLock = app.requestSingleInstanceLock()
 
@@ -142,6 +142,7 @@ if (!gotLock) {
     for (const path of pathsFromArgv(process.argv, process.cwd(), argvFilter())) {
       pendingOpens.push(path)
     }
+    installContentsGuards()
     registerIpc((wcId) => sessions.get(wcId) ?? null, actions)
     installMenu(actions)
 
