@@ -104,22 +104,40 @@ new TableControls(editor.view)
 
 const preview = new Preview((pos) => exitPreview(pos))
 
+/* The render is async, so "previewing" is three states, not two: hidden,
+ * entering (render in flight), shown. The generation counter lets exit
+ * cancel an in-flight enter — Preview.show unconditionally un-hides when it
+ * resolves, and a stale resolution must not overrule the user's toggle. */
+let previewGen = 0
+let previewEntering = false
+
 async function enterPreview(nearPos?: number): Promise<void> {
   const at = nearPos ?? editor.view.state.selection.main.head
+  const gen = ++previewGen
+  previewEntering = true
   try {
     // Render before hiding the editor: while the pipeline works, the user
     // sees their document as text — never blank paper.
     await preview.show(editor.getContent(), currentDir, at)
+    if (gen !== previewGen) {
+      preview.hide()
+      return
+    }
     document.documentElement.classList.add('previewing')
   } catch (err) {
+    if (gen !== previewGen) return
     // Never strand the user staring at a hidden editor.
     console.error('preview render failed', err)
     exitPreview()
     showToast('Preview failed to render — staying in the editor.')
+  } finally {
+    if (gen === previewGen) previewEntering = false
   }
 }
 
 function exitPreview(pos?: number): void {
+  previewGen++
+  previewEntering = false
   document.documentElement.classList.remove('previewing')
   preview.hide()
   if (pos !== undefined) {
@@ -133,7 +151,7 @@ function exitPreview(pos?: number): void {
 }
 
 function togglePreview(): void {
-  if (preview.visible) exitPreview()
+  if (preview.visible || previewEntering) exitPreview()
   else void enterPreview()
 }
 
@@ -187,7 +205,7 @@ const paletteCommands = (): PaletteCommand[] => [
     title: 'Find & Replace',
     hint: `${mod}F`,
     run: () => {
-      if (preview.visible) exitPreview()
+      if (preview.visible || previewEntering) exitPreview()
       openSearchPanel(editor.view)
     }
   },
@@ -286,7 +304,7 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === 'Escape' && helpPreview.visible) {
     e.preventDefault()
     toggleHelp()
-  } else if (e.key === 'Escape' && preview.visible) {
+  } else if (e.key === 'Escape' && (preview.visible || previewEntering)) {
     e.preventDefault()
     exitPreview()
   }
