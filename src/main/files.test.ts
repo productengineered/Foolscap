@@ -2,7 +2,21 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { atomicWriteFile, timestampName } from './files'
+import { atomicWriteFile, tempName, timestampName } from './files'
+
+describe('tempName', () => {
+  it('never repeats for the same target', () => {
+    const names = new Set(Array.from({ length: 500 }, () => tempName('/docs/notes.md')))
+    expect(names.size).toBe(500)
+  })
+
+  it('stays hidden, stays beside the target, and keeps the .tmp suffix', () => {
+    const name = tempName('/docs/notes.md')
+    expect(name.startsWith('.notes.md.foolscap-')).toBe(true)
+    expect(name.endsWith('.tmp')).toBe(true)
+    expect(name).not.toContain('/')
+  })
+})
 
 describe('timestampName', () => {
   it('formats a sortable pasted-asset name', () => {

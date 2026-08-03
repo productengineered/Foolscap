@@ -37,7 +37,10 @@ async function rememberNotified(version: string): Promise<void> {
   }
 }
 
-export function scheduleUpdateCheck(notify: (info: UpdateInfo) => void): void {
+/* notify returns whether the toast actually reached a window; a notice that
+ * found no window to land in is not recorded, so it can try again next
+ * launch instead of being swallowed forever. */
+export function scheduleUpdateCheck(notify: (info: UpdateInfo) => boolean): void {
   /* FOOLSCAP_UPDATE_FEED points the check elsewhere and enables it in dev —
    * the only way to exercise the flow without cutting a release. */
   const override = process.env['FOOLSCAP_UPDATE_FEED']
@@ -46,7 +49,7 @@ export function scheduleUpdateCheck(notify: (info: UpdateInfo) => void): void {
   setTimeout(() => void check(override ?? FEED_URL, notify), 5000)
 }
 
-async function check(url: string, notify: (info: UpdateInfo) => void): Promise<void> {
+async function check(url: string, notify: (info: UpdateInfo) => boolean): Promise<void> {
   try {
     const res = await net.fetch(url, {
       headers: { Accept: 'application/vnd.github+json' },
@@ -58,8 +61,7 @@ async function check(url: string, notify: (info: UpdateInfo) => void): Promise<v
     const version = release.tag_name.replace(/^v/, '')
     if (!isNewerVersion(version, app.getVersion())) return
     if (await alreadyNotified(version)) return
-    await rememberNotified(version)
-    notify({ version, url: release.html_url })
+    if (notify({ version, url: release.html_url })) await rememberNotified(version)
   } catch {
     // offline, rate-limited, bad DNS — all fine, all silent
   }

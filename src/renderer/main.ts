@@ -33,9 +33,9 @@ import './styles/base.css'
 import { openSearchPanel } from '@codemirror/search'
 import { EditorView } from '@codemirror/view'
 import { renderMarkdown } from '../shared/markdown'
-import { DROPPABLE_FILE } from '../shared/types'
 import { createEditor } from './editor/setup'
 import helpMd from './help.md?raw'
+import { classifyDrop } from './ui/drop'
 import {
   adjustTextSize,
   applyCustomTheme,
@@ -223,19 +223,29 @@ const paletteCommands = (): PaletteCommand[] => [
 const palette = new Palette(paletteCommands, () => editor.view.focus())
 
 /* Drag a markdown file onto the window to open it here — with the same
- * unsaved-changes guard as any other open. */
+ * unsaved-changes guard as any other open. Capture phase: CodeMirror's drop
+ * handler preventDefaults but never stops propagation, so without this it
+ * inserts the file's text and we open it too. */
 window.addEventListener('dragover', (e) => e.preventDefault())
-window.addEventListener('drop', (e) => {
-  e.preventDefault()
-  const file = e.dataTransfer?.files[0]
-  if (!file) return
-  if (!DROPPABLE_FILE.test(file.name)) {
-    showToast('Foolscap opens markdown files (.md, .markdown, .mdx, .txt).')
-    return
-  }
-  const path = window.foolscap.pathForFile(file)
-  if (path) window.foolscap.openDropped(path)
-})
+window.addEventListener(
+  'drop',
+  (e) => {
+    const files = e.dataTransfer?.files
+    const verdict = classifyDrop(files ? Array.from(files, (f) => f.name) : [])
+    if (verdict === 'pass') return
+    e.preventDefault()
+    e.stopPropagation()
+    if (verdict === 'reject') {
+      showToast('Foolscap opens markdown files (.md, .markdown, .mdx, .txt).')
+      return
+    }
+    const file = files?.[0]
+    if (!file) return
+    const path = window.foolscap.pathForFile(file)
+    if (path) window.foolscap.openDropped(path)
+  },
+  true
+)
 
 /* First-ever run: open with the manual. Once, ever. */
 if (!localStorage.getItem('foolscap:first-run-done')) {

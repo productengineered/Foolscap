@@ -1,4 +1,5 @@
 import { watch, type FSWatcher } from 'chokidar'
+import { randomBytes } from 'node:crypto'
 import { open, readFile, rename, unlink } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 
@@ -9,8 +10,12 @@ export function readTextFile(path: string): Promise<string> {
 /* Atomic save per ULTRAPLAN §6: write a temp file in the same directory,
  * fsync, then rename over the target. A crash mid-write can lose the temp
  * file but can never truncate the manuscript. */
+export function tempName(path: string): string {
+  return `.${basename(path)}.foolscap-${process.pid}-${randomBytes(4).toString('hex')}.tmp`
+}
+
 export async function atomicWriteFile(path: string, data: string | Uint8Array): Promise<void> {
-  const tmp = join(dirname(path), `.${basename(path)}.foolscap-${process.pid}.tmp`)
+  const tmp = join(dirname(path), tempName(path))
   const fh = await open(tmp, 'w')
   let closed = false
   try {
