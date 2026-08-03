@@ -1,6 +1,11 @@
 /* The typed IPC contract. Main, preload, and renderer all import from here —
  * channel names and payload shapes exist in exactly one place. */
 
+/* 'open' is a user-initiated document arrival (open, restore); 'reload' is
+ * the same document refreshed from disk (watcher echo, conflict Reload).
+ * Only 'open' may change the editor/preview mode. */
+export type LoadReason = 'open' | 'reload'
+
 export interface DocPayload {
   path: string | null
   /* Directory of the document, main-computed — the renderer has no path
@@ -10,6 +15,7 @@ export interface DocPayload {
   /* True when restoring an unsaved buffer from a persisted session — the
    * document arrives already-dirty and opens in edit mode. */
   dirty: boolean
+  reason: LoadReason
 }
 
 export type ConflictChoice = 'reload' | 'keep'
