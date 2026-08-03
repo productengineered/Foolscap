@@ -1,7 +1,7 @@
 import { markdownLanguage } from '@codemirror/lang-markdown'
 import { Text } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
-import { fenceTestHooks, keyFor } from './code-fence'
+import { fenceLang, fenceTestHooks, keyFor } from './code-fence'
 import { collectConstructSpecs, type DecoSpec } from './index'
 
 function specs(doc: string): DecoSpec[] {
@@ -55,6 +55,26 @@ describe('construct 6: code fences', () => {
     }
     // tokens from the second line prove offsets are absolute
     expect(spans!.some((s) => s.start >= 12)).toBe(true)
+    fenceTestHooks.cache.clear()
+  })
+
+  it('info-string metadata does not defeat the language lookup', () => {
+    expect(fenceLang('js {1-3}')).toBe('js')
+    expect(fenceLang('ts twoslash')).toBe('ts')
+    expect(fenceLang('  PYTHON  ')).toBe('python')
+    expect(fenceLang('')).toBe('')
+  })
+
+  it('fences with metadata still match cached tokens', () => {
+    const code = 'const x = 1'
+    fenceTestHooks.cache.set(keyFor('js', code), [
+      { start: 0, end: 5, color: 'var(--shiki-token-keyword)' }
+    ])
+    const all = specs('```js {1-3}\nconst x = 1\n```')
+    const styled = all.filter((s) => s.kind === 'mark' && s.style)
+    expect(styled).toEqual([
+      { kind: 'mark', from: 12, to: 17, style: 'color: var(--shiki-token-keyword)' }
+    ])
     fenceTestHooks.cache.clear()
   })
 
