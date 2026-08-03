@@ -1,5 +1,10 @@
 import { EditorView } from '@codemirror/view'
-import type { Extension } from '@codemirror/state'
+import {
+  EditorSelection,
+  type EditorState,
+  type Extension,
+  type TransactionSpec
+} from '@codemirror/state'
 
 /* Paste an image from the clipboard: bytes go to main, which writes them
  * into an assets/ folder beside the document and answers with a relative
@@ -16,6 +21,16 @@ const EXT_BY_MIME: Record<string, string> = {
 
 export function extForMime(mime: string): string | null {
   return EXT_BY_MIME[mime] ?? null
+}
+
+/* changeByRange maps positions across sibling ranges, so with multiple
+ * cursors each one gets its own link with the caret in the alt brackets —
+ * a fixed selection.main offset would land inside an earlier insertion. */
+export function imageInsertion(state: EditorState, relPath: string): TransactionSpec {
+  return state.changeByRange((range) => ({
+    changes: { from: range.from, to: range.to, insert: `![](${relPath})` },
+    range: EditorSelection.cursor(range.from + 2)
+  }))
 }
 
 export function pasteImage(onNoDocument: () => void): Extension {
@@ -45,9 +60,6 @@ async function insert(
     onNoDocument()
     return
   }
-  const { from } = view.state.selection.main
-  view.dispatch(view.state.replaceSelection(`![](${relPath})`))
-  // Park the cursor in the alt brackets.
-  view.dispatch({ selection: { anchor: from + 2 } })
+  view.dispatch(imageInsertion(view.state, relPath))
   view.focus()
 }
