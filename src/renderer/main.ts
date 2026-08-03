@@ -73,8 +73,15 @@ let dirty = false
 let currentPath: string | null = null
 let currentDir: string | null = null
 
+/* Set on every edit, cleared each time the buffer is handed to main. A save
+ * snapshots the buffer over IPC and writes async; keystrokes landing in that
+ * window are in the buffer but not in the file, and doc:saved must not mark
+ * them clean. */
+let editedSinceContentSent = false
+
 const editor = createEditor(app, {
   onDocChanged: () => {
+    editedSinceContentSent = true
     if (!dirty) {
       dirty = true
       window.foolscap.setDirty(true)
@@ -326,11 +333,21 @@ window.foolscap.onSaved((saved) => {
   currentPath = saved.path
   currentDir = saved.dir
   editor.setDocDir(saved.dir)
-  markClean()
+  if (editedSinceContentSent) {
+    // Edits landed after the save's snapshot: the file is already stale.
+    // Stay dirty — and tell main so, since its session cleared its own flag
+    // when the write finished.
+    dirty = true
+    window.foolscap.setDirty(true)
+    setTitlebar(currentPath, true)
+  } else {
+    markClean()
+  }
 })
 
 window.foolscap.onRequestContent(() => {
   window.foolscap.sendContent(editor.getContent())
+  editedSinceContentSent = false
 })
 
 window.foolscap.onConflict(() => {
