@@ -42,10 +42,20 @@ export class Preview {
     this.el.addEventListener('click', (event) => {
       const target = event.target instanceof Element ? event.target : null
       const link = target?.closest<HTMLAnchorElement>('a[href]')
-      if (link) {
-        event.preventDefault()
-        window.foolscap.openExternal(link.href)
+      if (!link) return
+      event.preventDefault()
+      const href = link.getAttribute('href') ?? ''
+      if (href.startsWith('#')) {
+        // In-document link (GFM footnotes): navigate inside this pane.
+        // link.href would resolve against the page URL — file:// (rejected
+        // by main's scheme allowlist) or, in dev, the dev server's http URL
+        // (which would open the dev server in the user's browser). Scoped to
+        // this.el because help and preview panes share one document.
+        const id = decodeURIComponent(href.slice(1))
+        this.el.querySelector(`[id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'start' })
+        return
       }
+      window.foolscap.openExternal(link.href)
     })
   }
 
