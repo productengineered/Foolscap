@@ -1,6 +1,22 @@
 import { resolveImageSrc } from '../editor/live-preview/images'
 import { renderMarkdown } from '../../shared/markdown'
 
+/* Index of the stamp best covering pos: the largest one <= pos. DOM order is
+ * not source order — remark-rehype hoists footnote definitions to the end of
+ * the document while they keep their early source offsets — so a last-match
+ * scan would land on the footnote block instead of the requested element. */
+export function bestCoveringIndex(positions: readonly number[], pos: number): number {
+  let best = -1
+  let bestPos = -1
+  positions.forEach((at, i) => {
+    if (at <= pos && at > bestPos) {
+      bestPos = at
+      best = i
+    }
+  })
+  return best
+}
+
 /* Preview mode: the document rendered by THE export pipeline — what you
  * preview is exactly what HTML and PDF export produce. Read-only by nature;
  * double-clicking any element drops back into the editor at that element's
@@ -53,11 +69,9 @@ export class Preview {
   /* Scroll the rendered pane to the element covering a source position —
    * outline jumps while previewing land here. */
   scrollTo(pos: number, block: ScrollLogicalPosition = 'start'): void {
-    let best: HTMLElement | null = null
-    for (const candidate of this.el.querySelectorAll<HTMLElement>('[data-pos]')) {
-      if (Number(candidate.dataset['pos']) <= pos) best = candidate
-      else break
-    }
+    const candidates = [...this.el.querySelectorAll<HTMLElement>('[data-pos]')]
+    const stamps = candidates.map((c) => Number(c.dataset['pos']))
+    const best = candidates[bestCoveringIndex(stamps, pos)]
     best?.scrollIntoView({ block })
   }
 
