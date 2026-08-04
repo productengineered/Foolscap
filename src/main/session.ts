@@ -88,7 +88,7 @@ export class DocumentSession {
   async captureState(): Promise<SessionEntry | null> {
     if (this.isEmpty) return null
     if (!this.dirty) return { path: this.path, dirty: false, content: null }
-    const content = await this.getRendererContent()
+    const content = await this.getRendererContent(3000)
     return { path: this.path, dirty: true, content }
   }
 
@@ -186,7 +186,13 @@ export class DocumentSession {
       if (result.canceled || !result.filePath) return false
       target = result.filePath
     }
-    const content = await this.getRendererContent()
+    let content: string
+    try {
+      content = await this.getRendererContent()
+    } catch (err) {
+      dialog.showErrorBox('Save failed', `${target}\n\n${String(err)}`)
+      return false
+    }
     this.unwatch()
     try {
       await atomicWriteFile(target, content)
@@ -209,8 +215,8 @@ export class DocumentSession {
   async exportHtml(): Promise<void> {
     const target = await this.pickExportPath('HTML', 'html')
     if (!target) return
-    const content = await this.getRendererContent()
     try {
+      const content = await this.getRendererContent()
       const html = await renderExportHtml(content, { title: this.docName() })
       await atomicWriteFile(target, html)
     } catch (err) {
@@ -221,8 +227,8 @@ export class DocumentSession {
   async exportPdf(): Promise<void> {
     const target = await this.pickExportPath('PDF', 'pdf')
     if (!target) return
-    const content = await this.getRendererContent()
     try {
+      const content = await this.getRendererContent()
       const dir = this.path ? dirname(this.path) : null
       const pdf = await renderPdf(content, this.docName(), dir)
       await atomicWriteFile(target, pdf)
@@ -246,8 +252,8 @@ export class DocumentSession {
   }
 
   async printDoc(): Promise<void> {
-    const content = await this.getRendererContent()
     try {
+      const content = await this.getRendererContent()
       await printDocument(content, this.docName(), this.path ? dirname(this.path) : null)
     } catch (err) {
       dialog.showErrorBox('Print failed', String(err))
@@ -335,18 +341,47 @@ export class DocumentSession {
     }
   }
 
-  private getRendererContent(): Promise<string> {
-    return new Promise((resolve) => {
+  /* A promise that never settles would hang its caller — quit most fatally,
+   * where one wedged window would also cost every other window's drafts. A
+   * crashed or destroyed renderer rejects; timeoutMs (the quit path) bounds
+   * a merely hung one. */
+  private getRendererContent(timeoutMs?: number): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const wc = this.win.webContents
+      let timer: NodeJS.Timeout | undefined
+      const cleanup = (): void => {
+        ipcMain.off(IPC.content, handler)
+        wc.off('render-process-gone', onGone)
+        wc.off('destroyed', onGone)
+        clearTimeout(timer)
+      }
       // Filter by sender: with several windows open, another window's reply
       // must never satisfy this request.
       const handler = (e: Electron.IpcMainEvent, content: string): void => {
-        if (e.sender.id === this.win.webContents.id) {
-          ipcMain.off(IPC.content, handler)
+        if (e.sender.id === wc.id) {
+          cleanup()
           resolve(content)
         }
       }
+      const onGone = (): void => {
+        cleanup()
+        reject(new Error('renderer gone before replying with its content'))
+      }
       ipcMain.on(IPC.content, handler)
-      this.win.webContents.send(IPC.requestContent)
+      wc.on('render-process-gone', onGone)
+      wc.on('destroyed', onGone)
+      if (timeoutMs !== undefined) {
+        timer = setTimeout(() => {
+          cleanup()
+          reject(new Error('renderer did not reply with its content'))
+        }, timeoutMs)
+      }
+      try {
+        wc.send(IPC.requestContent)
+      } catch (err) {
+        cleanup()
+        reject(err instanceof Error ? err : new Error(String(err)))
+      }
     })
   }
 
