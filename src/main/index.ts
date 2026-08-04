@@ -147,7 +147,11 @@ if (!gotLock) {
     installMenu(actions)
 
     appReady = true
-    const restored = pendingOpens.length === 0 ? await loadSession(sessionFile()) : null
+    // The session restores even when the launch carries file arguments:
+    // skipping it would leave session.json unconsumed, and the next quit's
+    // persistAndQuit overwrites it wholesale — silently destroying persisted
+    // drafts. Restored windows and argument files open side by side.
+    const restored = await loadSession(sessionFile())
     // Every unclosed window comes back — clean documents only if their file
     // still exists; dirty drafts always, the content outranks the file.
     // EACCES and friends count as gone: throwIfNoEntry only covers ENOENT,
@@ -163,14 +167,20 @@ if (!gotLock) {
       (entry) => entry.dirty || (entry.path !== null && fileExists(entry.path))
     )
     if (restored) await clearSession(sessionFile())
-    if (restorable.length > 0) {
-      for (const entry of restorable) void boot().restore(entry)
-    } else if (pendingOpens.length === 0) {
-      boot()
-    } else {
-      for (const path of pendingOpens) boot(path)
-      pendingOpens.length = 0
+    // Dedup against the argument paths: a clean persisted entry for a file
+    // that's also an argument yields to the argument's window; a dirty entry
+    // wins and the argument is dropped — the draft outranks the disk copy.
+    const argPaths = new Set(pendingOpens)
+    const entries = restorable.filter(
+      (entry) => entry.dirty || entry.path === null || !argPaths.has(entry.path)
+    )
+    const restoredPaths = new Set(entries.map((entry) => entry.path))
+    for (const entry of entries) void boot().restore(entry)
+    for (const path of pendingOpens) {
+      if (!restoredPaths.has(path)) boot(path)
     }
+    pendingOpens.length = 0
+    if (sessions.size === 0) boot()
 
     app.on('activate', () => {
       if (sessions.size === 0) boot()
