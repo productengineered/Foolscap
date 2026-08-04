@@ -4,7 +4,7 @@ import { readTextFile } from './files'
 import type { MenuActions } from './menu'
 import type { DocumentSession } from './session'
 
-const OPENABLE_SCHEMES = new Set(['http:', 'https:', 'mailto:'])
+export const OPENABLE_SCHEMES = new Set(['http:', 'https:', 'mailto:'])
 
 /* Renderer → main channels, routed to the sender's session — with several
  * windows open, e.sender.id is the only truth about which document is
