@@ -37,6 +37,21 @@ describe('construct 4: lists', () => {
     expect(indentOf(specs(doc), 8)).toBe('padding-left: 4ch; text-indent: -4ch')
   })
 
+  it('a wider gap after the marker moves the content column with it', () => {
+    // CommonMark allows up to three spaces after the marker.
+    expect(indentOf(specs('-   item'), 0)).toBe('padding-left: 4ch; text-indent: -4ch')
+  })
+
+  it('tab indent counts in tab-aware columns', () => {
+    // tab → column 4, marker → 5, space → content column 6
+    const doc = '- outer\n\t- inner'
+    expect(indentOf(specs(doc), 8)).toBe('padding-left: 6ch; text-indent: -6ch')
+  })
+
+  it('a bare marker at end of line keeps the one-space column', () => {
+    expect(indentOf(specs('- item\n-'), 7)).toBe('padding-left: 2ch; text-indent: -2ch')
+  })
+
   it('ordered markers are wider and get the quiet-mark class, never a bullet', () => {
     const all = specs('1. first')
     // '1.' is two chars + one space = content column 3
