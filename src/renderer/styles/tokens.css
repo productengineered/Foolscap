@@ -62,6 +62,9 @@
   --radius-inline: 4px;
   /* Text inset from the edge of sunk fills (fences, blockquotes). */
   --pad-block: 0.4rem;
+  /* Floating chrome (table chip bar): window-edge clamp and gap above. */
+  --edge-inset: 8px;
+  --table-bar-gap: 6px;
 
   /* ---- Selection ----
    * Translucent, because the selection layer paints above the content: it
@@ -74,6 +77,10 @@
   --dur-mark: 140ms;
   --ease-mark: cubic-bezier(0.4, 0, 0.2, 1);
   --dur-fade: 240ms; /* chrome fades: word count in the corner */
+  --dur-toast: 4000ms;
+  --dur-toast-update: 20000ms; /* once per version, so it can linger */
+  --dur-wordcount-peek: 2000ms; /* §4.4: visible this long after mouse move */
+  --dur-table-bar-hide: 350ms; /* grace period to reach the chip bar */
 
   /* ---- Shiki code tokens, from the same palette (§3: theme-bound) ----
    * These are the css-variables theme's hooks; because they reference the

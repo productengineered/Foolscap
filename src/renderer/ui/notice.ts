@@ -1,4 +1,5 @@
 import type { ConflictChoice } from '../../shared/types'
+import { tokenMs } from './tokens'
 
 let bar: HTMLElement | null = null
 
@@ -51,7 +52,7 @@ export function showToast(message: string): void {
   toast.setAttribute('role', 'status')
   toast.textContent = message
   document.body.append(toast)
-  setTimeout(() => toast.remove(), 4000)
+  setTimeout(() => toast.remove(), tokenMs('--dur-toast'))
 }
 
 /* A newer release exists. Main sends this at most once per version, so the
@@ -79,5 +80,5 @@ export function showUpdateToast(version: string, url: string): void {
 
   toast.append(label, get, later)
   document.body.append(toast)
-  setTimeout(() => toast.remove(), 20_000)
+  setTimeout(() => toast.remove(), tokenMs('--dur-toast-update'))
 }
