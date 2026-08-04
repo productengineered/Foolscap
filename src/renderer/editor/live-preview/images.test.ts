@@ -33,6 +33,12 @@ describe('resolveImageSrc', () => {
     )
   })
 
+  it('filenames with URL-special characters stay literal path segments', () => {
+    expect(resolveImageSrc('photo#1.png', '/docs')).toBe('file:///docs/photo%231.png')
+    expect(resolveImageSrc('what?.png', '/docs')).toBe('file:///docs/what%3F.png')
+    expect(resolveImageSrc('/pics/100%.png', null)).toBe('file:///pics/100%25.png')
+  })
+
   it('relative path with no document dir cannot resolve', () => {
     expect(resolveImageSrc('assets/a.png', null)).toBeNull()
   })
