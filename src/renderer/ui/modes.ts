@@ -176,10 +176,18 @@ function injectCustomThemeCss(css: string): void {
   document.documentElement.dataset['theme'] = 'custom'
 }
 
-export function applyCustomTheme(css: string): void {
+/* Applies to the DOM unconditionally; returns whether the theme could also
+ * be persisted. localStorage.setItem throws QuotaExceededError past ~5 MB,
+ * and an oversized theme file must not take down the caller with it. */
+export function applyCustomTheme(css: string): boolean {
   injectCustomThemeCss(css)
-  localStorage.setItem(STORE.customThemeCss, css)
-  localStorage.setItem(STORE.theme, 'custom')
+  try {
+    localStorage.setItem(STORE.customThemeCss, css)
+    localStorage.setItem(STORE.theme, 'custom')
+    return true
+  } catch {
+    return false
+  }
 }
 
 /* ---- Current-state readers for the settings sheet ---- */
