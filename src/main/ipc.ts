@@ -1,5 +1,5 @@
 import { dialog, ipcMain, shell } from 'electron'
-import { IPC, type AppCommand, type ConflictChoice } from '../shared/types'
+import { DROPPABLE_FILE, IPC, type AppCommand, type ConflictChoice } from '../shared/types'
 import { readTextFile } from './files'
 import type { MenuActions } from './menu'
 import type { DocumentSession } from './session'
@@ -45,7 +45,8 @@ export function registerIpc(
     return session.savePastedImage(bytes, ext)
   })
   ipcMain.on(IPC.openDropped, (e, path: string) => {
-    if (typeof path === 'string' && path.length > 0) {
+    // Same filter the renderer applies to the drop; main must not trust it.
+    if (typeof path === 'string' && DROPPABLE_FILE.test(path)) {
       void sessionFor(e.sender.id)?.openPath(path)
     }
   })
