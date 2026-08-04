@@ -149,9 +149,17 @@ if (!gotLock) {
     const restored = pendingOpens.length === 0 ? await loadSession(sessionFile()) : null
     // Every unclosed window comes back — clean documents only if their file
     // still exists; dirty drafts always, the content outranks the file.
+    // EACCES and friends count as gone: throwIfNoEntry only covers ENOENT,
+    // and a stat throw here would abort the whole launch windowless.
+    const fileExists = (path: string): boolean => {
+      try {
+        return statSync(path, { throwIfNoEntry: false }) !== undefined
+      } catch {
+        return false
+      }
+    }
     const restorable = (restored ?? []).filter(
-      (entry) =>
-        entry.dirty || (entry.path !== null && statSync(entry.path, { throwIfNoEntry: false }))
+      (entry) => entry.dirty || (entry.path !== null && fileExists(entry.path))
     )
     if (restored) await clearSession(sessionFile())
     if (restorable.length > 0) {
