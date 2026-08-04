@@ -336,7 +336,11 @@ window.foolscap.onLoad((doc) => {
   modes.refresh()
   // Existing clean documents open in preview; new, empty, or restored-dirty
   // ones go straight to the editor. Double-click (or ⌘E / Escape) edits.
-  if (!doc.dirty && doc.path && doc.content.trim() !== '') {
+  // Reloads (disk watcher, conflict Reload) never change the mode: staying
+  // in the editor is the point, and a visible preview just re-renders.
+  if (doc.reason === 'reload') {
+    if (preview.visible) void enterPreview(0)
+  } else if (!doc.dirty && doc.path && doc.content.trim() !== '') {
     void enterPreview(0)
   } else {
     exitPreview()

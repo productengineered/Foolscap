@@ -1,7 +1,13 @@
 import { app, dialog, ipcMain, type BrowserWindow } from 'electron'
 import type { FSWatcher } from 'chokidar'
 import { basename, dirname, join } from 'node:path'
-import { IPC, type ConflictChoice, type DocPayload, type SavedPayload } from '../shared/types'
+import {
+  IPC,
+  type ConflictChoice,
+  type DocPayload,
+  type LoadReason,
+  type SavedPayload
+} from '../shared/types'
 import { renderExportHtml } from './export/html'
 import { printDocument, renderPdf } from './export/pdf'
 import { atomicWriteFile, readTextFile, timestampName, watchFile } from './files'
@@ -265,14 +271,14 @@ export class DocumentSession {
 
   resolveConflict(choice: ConflictChoice): void {
     if (choice === 'reload' && this.pendingDiskContent !== null) {
-      this.load(this.pendingDiskContent)
+      this.load(this.pendingDiskContent, false, 'reload')
     }
     this.pendingDiskContent = null
   }
 
   /* ---- internals ---- */
 
-  private load(content: string, dirty = false): void {
+  private load(content: string, dirty = false, reason: LoadReason = 'open'): void {
     if (this.win.isDestroyed()) return
     this.dirty = dirty
     this.pendingDiskContent = null
@@ -281,7 +287,8 @@ export class DocumentSession {
       path: this.path,
       dir: this.path ? dirname(this.path) : null,
       content,
-      dirty
+      dirty,
+      reason
     }
     this.win.webContents.send(IPC.load, payload)
   }
@@ -372,7 +379,7 @@ export class DocumentSession {
       this.pendingDiskContent = disk
       this.win.webContents.send(IPC.conflict)
     } else {
-      this.load(disk)
+      this.load(disk, false, 'reload')
     }
   }
 }
