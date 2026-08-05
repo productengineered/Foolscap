@@ -31,6 +31,9 @@ mac:
   icon: build/icon.icns
   hardenedRuntime: true
   gatekeeperAssess: false
+  # Runs only on signed builds (skipped whenever signing is skipped), using
+  # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID from the env.
+  notarize: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   target:
