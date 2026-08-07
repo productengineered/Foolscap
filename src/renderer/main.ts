@@ -31,8 +31,16 @@ import './styles/themes/vercel.css'
 import './styles/themes/vscode.css'
 import './styles/base.css'
 import { openSearchPanel } from '@codemirror/search'
+import type { StateCommand } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { renderMarkdown } from '../shared/markdown'
+import {
+  insertLink,
+  toggleBold,
+  toggleInlineCode,
+  toggleItalic,
+  toggleStrikethrough
+} from './editor/format-commands'
 import { createEditor } from './editor/setup'
 import helpMd from './help.md?raw'
 import { classifyDrop } from './ui/drop'
@@ -194,6 +202,14 @@ function loadCustomTheme(): void {
 
 const settings = new Settings({ modes, loadCustomTheme })
 
+/* Menu accelerators arrive here even while an overlay is up; formatting only
+ * makes sense against a visible buffer with a caret in it. */
+function formatInEditor(command: StateCommand): void {
+  if (preview.visible || previewEntering || helpPreview.visible) return
+  editor.view.focus()
+  command(editor.view)
+}
+
 window.foolscap.onCommand((command) => {
   if (command === 'toggle-outline') outline.toggle()
   else if (command === 'toggle-typewriter') modes.toggleTypewriter()
@@ -205,6 +221,11 @@ window.foolscap.onCommand((command) => {
   else if (command === 'text-smaller') adjustTextSize(-1)
   else if (command === 'text-reset') applyTextSize(null)
   else if (command === 'open-settings') settings.toggle()
+  else if (command === 'format-bold') formatInEditor(toggleBold)
+  else if (command === 'format-italic') formatInEditor(toggleItalic)
+  else if (command === 'format-strike') formatInEditor(toggleStrikethrough)
+  else if (command === 'format-code') formatInEditor(toggleInlineCode)
+  else if (command === 'format-link') formatInEditor(insertLink)
 })
 
 const mod = window.foolscap.platform === 'darwin' ? '⌘' : 'Ctrl+'
@@ -224,6 +245,11 @@ const paletteCommands = (): PaletteCommand[] => [
     }
   },
   { id: 'preview', title: 'Toggle Preview', hint: `${mod}E`, run: () => togglePreview() },
+  { id: 'format-bold', title: 'Format: Bold', hint: `${mod}B`, run: () => formatInEditor(toggleBold) },
+  { id: 'format-italic', title: 'Format: Italic', hint: `${mod}I`, run: () => formatInEditor(toggleItalic) },
+  { id: 'format-strike', title: 'Format: Strikethrough', hint: `⇧${mod}X`, run: () => formatInEditor(toggleStrikethrough) },
+  { id: 'format-code', title: 'Format: Inline Code', hint: `⇧${mod}C`, run: () => formatInEditor(toggleInlineCode) },
+  { id: 'format-link', title: 'Format: Link', hint: `⇧${mod}K`, run: () => formatInEditor(insertLink) },
   { id: 'help', title: 'wtf is this? (Help)', hint: `⇧${mod}/`, run: () => window.foolscap.exec('help-window') },
   { id: 'outline', title: 'Toggle Outline', hint: `⇧${mod}O`, run: () => outline.toggle() },
   { id: 'export-html', title: 'Export as HTML…', run: () => window.foolscap.exec('export-html') },
