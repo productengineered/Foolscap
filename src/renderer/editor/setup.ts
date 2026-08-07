@@ -31,6 +31,7 @@ export interface EditorHooks {
   onDocChanged(): void
   onUpdate(update: ViewUpdate): void
   onNoDocumentForPaste(): void
+  onPasteFailed(): void
 }
 
 /* What a new document opens as: a heading ready to be titled, cursor after
@@ -62,7 +63,7 @@ export function createEditor(parent: HTMLElement, hooks: EditorHooks): EditorHan
         }),
         livePreview(),
         tableNormalizer(),
-        pasteImage(hooks.onNoDocumentForPaste),
+        pasteImage(hooks.onNoDocumentForPaste, hooks.onPasteFailed),
         foolscapTheme()
       ]
     })

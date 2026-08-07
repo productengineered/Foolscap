@@ -1,6 +1,7 @@
 import { EditorSelection, EditorState } from '@codemirror/state'
-import { describe, expect, it } from 'vitest'
-import { extForMime, imageInsertion } from './paste-image'
+import type { EditorView } from '@codemirror/view'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { extForMime, imageInsertion, insertPastedImage } from './paste-image'
 
 describe('extForMime', () => {
   it('maps known image mimes and rejects the rest', () => {
@@ -39,5 +40,56 @@ describe('imageInsertion', () => {
     const next = state.update(imageInsertion(state, 'x.png')).state
     expect(next.doc.toString()).toBe('![](x.png)ab ![](x.png)cd')
     expect(next.selection.ranges.map((r) => r.head)).toEqual([2, 15])
+  })
+})
+
+describe('insertPastedImage', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const stubView = (): { view: EditorView; dispatch: ReturnType<typeof vi.fn> } => {
+    const dispatch = vi.fn()
+    const view = {
+      dispatch,
+      focus: vi.fn(),
+      state: EditorState.create({ doc: '' })
+    } as unknown as EditorView
+    return { view, dispatch }
+  }
+
+  const stubFile = (): File => ({ arrayBuffer: async () => new ArrayBuffer(4) }) as unknown as File
+
+  const stubBridge = (pasteImage: () => Promise<string | null>): void => {
+    vi.stubGlobal('window', { foolscap: { pasteImage } })
+  }
+
+  it('inserts the link main answers with', async () => {
+    stubBridge(async () => 'assets/a.png')
+    const { view, dispatch } = stubView()
+    await insertPastedImage(view, stubFile(), 'png', vi.fn())
+    expect(dispatch).toHaveBeenCalledOnce()
+  })
+
+  it('reports the unsaved document instead of inserting', async () => {
+    stubBridge(async () => null)
+    const { view, dispatch } = stubView()
+    const onNoDocument = vi.fn()
+    await insertPastedImage(view, stubFile(), 'png', onNoDocument)
+    expect(onNoDocument).toHaveBeenCalledOnce()
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  /* The write failing is the silent case: the paste handler has already
+   * called preventDefault, so the rejection has to escape for it to catch. */
+  it('rejects when the save fails, leaving the document untouched', async () => {
+    stubBridge(async () => {
+      throw new Error('EACCES')
+    })
+    const { view, dispatch } = stubView()
+    const onNoDocument = vi.fn()
+    await expect(insertPastedImage(view, stubFile(), 'png', onNoDocument)).rejects.toThrow('EACCES')
+    expect(onNoDocument).not.toHaveBeenCalled()
+    expect(dispatch).not.toHaveBeenCalled()
   })
 })
