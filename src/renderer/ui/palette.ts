@@ -126,6 +126,8 @@ export class Palette {
         this.runSelected(i)
       })
       this.listEl?.append(item)
+      // The list scrolls; the highlight must not walk off-screen.
+      if (i === this.selected) item.scrollIntoView({ block: 'nearest' })
     })
   }
 
