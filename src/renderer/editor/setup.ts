@@ -10,7 +10,6 @@ import {
   type ViewUpdate
 } from '@codemirror/view'
 import { createFindPanel } from '../ui/find'
-import { formatKeymap } from './format-commands'
 import { docDirFacet, livePreview } from './live-preview/index'
 import { pasteImage } from './paste-image'
 import { tableKeymap, tableNormalizer } from './table-commands'
