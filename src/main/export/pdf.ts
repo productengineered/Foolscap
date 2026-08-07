@@ -41,30 +41,30 @@ const FACES: EmbeddedFace[] = [
   },
   {
     family: 'Ioskeley Mono',
-    file: 'ioskeley/IoskeleyMono-Regular.ttf',
+    file: 'ioskeley/IoskeleyMono-Regular.woff2',
     source: { kind: 'repo' },
     weight: '400',
     style: 'normal',
-    format: 'truetype',
-    mime: 'font/ttf'
+    format: 'woff2',
+    mime: 'font/woff2'
   },
   {
     family: 'Ioskeley Mono',
-    file: 'ioskeley/IoskeleyMono-Italic.ttf',
+    file: 'ioskeley/IoskeleyMono-Italic.woff2',
     source: { kind: 'repo' },
     weight: '400',
     style: 'italic',
-    format: 'truetype',
-    mime: 'font/ttf'
+    format: 'woff2',
+    mime: 'font/woff2'
   },
   {
     family: 'Ioskeley Mono',
-    file: 'ioskeley/IoskeleyMono-Bold.ttf',
+    file: 'ioskeley/IoskeleyMono-Bold.woff2',
     source: { kind: 'repo' },
     weight: '700',
     style: 'normal',
-    format: 'truetype',
-    mime: 'font/ttf'
+    format: 'woff2',
+    mime: 'font/woff2'
   }
 ]
 
