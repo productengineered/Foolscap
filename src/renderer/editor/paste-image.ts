@@ -10,7 +10,9 @@ import {
  * into an assets/ folder beside the document and answers with a relative
  * path; the editor gets a plain markdown image link with the cursor parked
  * in the alt text. Main answers null for an unsaved document — there is no
- * "beside" yet. */
+ * "beside" yet — and rejects when the write itself fails. Either way the
+ * user has to hear about it: preventDefault has already suppressed the
+ * ordinary paste, so a swallowed failure leaves nothing behind at all. */
 
 const EXT_BY_MIME: Record<string, string> = {
   'image/png': 'png',
@@ -33,7 +35,7 @@ export function imageInsertion(state: EditorState, relPath: string): Transaction
   }))
 }
 
-export function pasteImage(onNoDocument: () => void): Extension {
+export function pasteImage(onNoDocument: () => void, onFailed: () => void): Extension {
   return EditorView.domEventHandlers({
     paste: (event, view) => {
       const items = event.clipboardData?.items
@@ -42,13 +44,15 @@ export function pasteImage(onNoDocument: () => void): Extension {
       const file = image?.getAsFile()
       if (!image || !file) return false
       event.preventDefault()
-      void insert(view, file, extForMime(image.type) as string, onNoDocument)
+      void insertPastedImage(view, file, extForMime(image.type) as string, onNoDocument).catch(
+        onFailed
+      )
       return true
     }
   })
 }
 
-async function insert(
+export async function insertPastedImage(
   view: EditorView,
   file: File,
   ext: string,

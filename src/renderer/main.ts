@@ -100,7 +100,8 @@ const editor = createEditor(app, {
     outline.handleUpdate(update)
     modes.handleUpdate(update)
   },
-  onNoDocumentForPaste: () => showToast('Save the document first — pasted images need a folder to live beside.')
+  onNoDocumentForPaste: () => showToast('Save the document first — pasted images need a folder to live beside.'),
+  onPasteFailed: () => showToast('That image could not be saved beside the document — check the folder is writable.')
 })
 const outline = new Outline(editor.view, (pos) => {
   const anchor = Math.min(pos, editor.view.state.doc.length)
