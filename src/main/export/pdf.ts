@@ -73,7 +73,7 @@ const FACES: EmbeddedFace[] = [
  * Packaged builds read Resources/fonts (extraResources); dev resolves
  * node_modules and the repo fonts/ dir. Missing faces degrade to system
  * fallbacks, never break the export. */
-async function fontFaceCss(): Promise<string> {
+async function buildFontFaceCss(): Promise<string[]> {
   const { app } = await import('electron')
   const css: string[] = []
   for (const face of FACES) {
@@ -108,7 +108,26 @@ async function fontFaceCss(): Promise<string> {
       }
     }
   }
-  return css.join('\n')
+  return css
+}
+
+let fontCssPromise: Promise<string> | null = null
+
+/* The faces never change at runtime, so read and encode them once. Neither a
+ * rejection nor an incomplete set is cached: a transient failure must not
+ * poison every later print, though the degraded result still serves this one. */
+function fontFaceCss(): Promise<string> {
+  fontCssPromise ??= buildFontFaceCss().then(
+    (faces) => {
+      if (faces.length < FACES.length) fontCssPromise = null
+      return faces.join('\n')
+    },
+    (err: unknown) => {
+      fontCssPromise = null
+      throw err
+    }
+  )
+  return fontCssPromise
 }
 
 /* Hidden window holding the fully-typeset export rendering — the shared
