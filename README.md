@@ -49,15 +49,13 @@ for now.
 ## Install
 
 Grab the DMG from [Releases](https://github.com/seamoss/Foolscap/releases) —
-`arm64` for Apple Silicon, plain for Intel. Builds are currently unsigned,
-so the first launch is right-click → **Open**. Foolscap checks Releases for
-newer versions and mentions them in a single quiet toast; it never installs
-anything itself.
+`arm64` for Apple Silicon, plain for Intel. Since **0.6.1**, builds are
+signed and notarized: drag to Applications and open like anything else.
+Foolscap checks Releases for newer versions and mentions them in a single
+quiet toast; it never installs anything itself.
 
-If macOS calls a download "damaged", it's a pre-0.5.1 build (they lacked
-the ad-hoc signature Apple Silicon insists on) — grab a fresh DMG, or run
-`xattr -cr /Applications/Foolscap.app` to clear quarantine on the one you
-have.
+(Releases before 0.6.1 were unsigned — if macOS grumbles about an old
+download, just grab a current one.)
 
 ## Building
 

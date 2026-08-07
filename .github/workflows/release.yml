@@ -2,17 +2,14 @@ name: Release
 
 # Tag vX.Y.Z → build, sign, notarize, publish to GitHub Releases.
 #
-# Required repository secrets:
-#   macOS signing + notarization:
-#     CSC_LINK                      base64 .p12 Developer ID certificate
-#     CSC_KEY_PASSWORD              its password
-#     APPLE_ID                      notarytool Apple ID
-#     APPLE_APP_SPECIFIC_PASSWORD   app-specific password
-#     APPLE_TEAM_ID                 team id
-#   Windows (Azure Trusted Signing — ULTRAPLAN §7):
-#     AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET
-#     (plus win.azureSignOptions in electron-builder.yml)
-# Without the secrets, builds still publish — unsigned.
+# Required repository secrets (the release FAILS without them — as of
+# v0.6.1 every published build must be signed and notarized):
+#   CSC_LINK                      base64 .p12 Developer ID certificate
+#   CSC_KEY_PASSWORD              its password
+#   APPLE_ID                      notarytool Apple ID
+#   APPLE_APP_SPECIFIC_PASSWORD   app-specific password
+#   APPLE_TEAM_ID                 team id
+# (Windows/Azure Trusted Signing per ULTRAPLAN §7 when that day comes.)
 
 on:
   push:
@@ -34,20 +31,21 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck && pnpm test
-      - name: Build and publish
-        # Signing env is exported only when the secrets actually exist: a
-        # missing secret interpolates to "", and electron-builder treats a
-        # set-but-empty CSC_LINK as a certificate path ("not a file").
+      - name: Build, sign, notarize
+        # Indirection via SECRET_*: a missing secret interpolates to "", and
+        # electron-builder treats a set-but-empty CSC_LINK as a certificate
+        # path ("not a file"), so only non-empty values are exported.
+        # Releases without signing secrets fail here, on purpose.
         run: |
-          if [ -n "$SECRET_CSC_LINK" ]; then
-            export CSC_LINK="$SECRET_CSC_LINK"
-            export CSC_KEY_PASSWORD="$SECRET_CSC_KEY_PASSWORD"
-            export APPLE_ID="$SECRET_APPLE_ID"
-            export APPLE_APP_SPECIFIC_PASSWORD="$SECRET_APPLE_APP_SPECIFIC_PASSWORD"
-            export APPLE_TEAM_ID="$SECRET_APPLE_TEAM_ID"
-          else
-            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          if [ -z "$SECRET_CSC_LINK" ]; then
+            echo "::error::Signing secrets are not configured — refusing to publish an unsigned build (policy since v0.6.1)."
+            exit 1
           fi
+          export CSC_LINK="$SECRET_CSC_LINK"
+          export CSC_KEY_PASSWORD="$SECRET_CSC_KEY_PASSWORD"
+          export APPLE_ID="$SECRET_APPLE_ID"
+          export APPLE_APP_SPECIFIC_PASSWORD="$SECRET_APPLE_APP_SPECIFIC_PASSWORD"
+          export APPLE_TEAM_ID="$SECRET_APPLE_TEAM_ID"
           pnpm exec electron-vite build
           pnpm exec electron-builder --mac --arm64 --x64 --publish never
         env:
@@ -56,6 +54,18 @@ jobs:
           SECRET_APPLE_ID: ${{ secrets.APPLE_ID }}
           SECRET_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           SECRET_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Assert signed and notarized
+        # Belt over braces: verify the Developer ID chain and ask Gatekeeper
+        # itself before anything is uploaded. spctl only accepts notarized
+        # Developer ID apps, so this catches a silently-skipped notarization.
+        run: |
+          for app in dist/mac-arm64/Foolscap.app dist/mac/Foolscap.app; do
+            codesign --verify --deep --strict "$app"
+            codesign -dvv "$app" 2>&1 | grep -q "Authority=Developer ID Application" \
+              || { echo "::error::$app is not Developer ID signed"; exit 1; }
+            spctl --assess --type execute "$app" \
+              || { echo "::error::$app failed Gatekeeper assessment (not notarized?)"; exit 1; }
+          done
       - name: Publish release assets
         # gh, not electron-builder's publisher: its per-arch publish contexts
         # raced and created two releases on one tag (observed at v0.5.0).
