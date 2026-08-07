@@ -1,4 +1,5 @@
 import rehypeShikiFromHighlighter from '@shikijs/rehype/core'
+import rehypeSlug from 'rehype-slug'
 import rehypeStringify from 'rehype-stringify'
 import remarkGfm from 'remark-gfm'
 import remarkParse from 'remark-parse'
@@ -67,7 +68,11 @@ function rehypeSourcePositions() {
 
 async function buildProcessor(sourcePositions: boolean) {
   const highlighter = await getHighlighter()
-  const base = unified().use(remarkParse).use(remarkGfm).use(remarkRehype)
+  const base = unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkRehype)
+    .use(rehypeSlug)
   const positioned = sourcePositions ? base.use(rehypeSourcePositions) : base
   return positioned
     .use(rehypeShikiFromHighlighter, highlighter, {

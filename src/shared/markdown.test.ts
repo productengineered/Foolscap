@@ -6,7 +6,7 @@ import { renderMarkdown } from './markdown'
 describe('renderMarkdown — THE pipeline', () => {
   it('renders headings, gfm strikethrough, and tables', async () => {
     const html = await renderMarkdown('# H\n\n~~x~~\n\n| a |\n| - |\n| b |')
-    expect(html).toContain('<h1>H</h1>')
+    expect(html).toContain('<h1 id="h">H</h1>')
     expect(html).toContain('<del>x</del>')
     expect(html).toContain('<table>')
   })
@@ -15,6 +15,26 @@ describe('renderMarkdown — THE pipeline', () => {
     const html = await renderMarkdown('ref[^1]\n\n[^1]: def')
     expect(html).toContain('data-footnotes')
     expect(html).toContain('def')
+  })
+
+  it('headings carry github-style anchor ids', async () => {
+    const html = await renderMarkdown('# Getting Started!\n\n## Café "quoted"')
+    expect(html).toContain('<h1 id="getting-started">')
+    expect(html).toContain('<h2 id="café-quoted">')
+  })
+
+  it('duplicate heading text gets suffixed ids', async () => {
+    const html = await renderMarkdown('## Install\n\n## Install\n\n## Install')
+    expect(html).toContain('<h2 id="install">')
+    expect(html).toContain('<h2 id="install-1">')
+    expect(html).toContain('<h2 id="install-2">')
+  })
+
+  it('a hand-written toc link resolves to its heading', async () => {
+    const html = await renderMarkdown('- [Install](#install)\n\n## Install')
+    const href = /<a href="#([^"]+)">/.exec(html)?.[1]
+    expect(href).toBe('install')
+    expect(html).toContain(`<h2 id="${href}">`)
   })
 
   it('highlights fences through the same css-variables Shiki theme', async () => {
@@ -35,7 +55,7 @@ describe('renderMarkdown — THE pipeline', () => {
 
   it('sourcePositions stamps block elements with source offsets', async () => {
     const html = await renderMarkdown('# One\n\ntext here', { sourcePositions: true })
-    expect(html).toContain('<h1 data-pos="0">')
+    expect(html).toContain('<h1 id="one" data-pos="0">')
     expect(html).toContain('data-pos="7"')
   })
 
