@@ -113,4 +113,53 @@ describe('construct 6: code fences', () => {
     const ok = await fenceTestHooks.tokenize('nolang', 'x', 'nolang x')
     expect(ok).toBe(false)
   })
+
+  it('the cache evicts its oldest entry instead of clearing wholesale', () => {
+    fenceTestHooks.cache.clear()
+    for (let i = 0; i <= 100; i++) fenceTestHooks.cacheSet(`k${i}`, [])
+    expect(fenceTestHooks.cache.size).toBe(100)
+    expect(fenceTestHooks.cache.has('k0')).toBe(false)
+    expect(fenceTestHooks.cache.has('k1')).toBe(true)
+    expect(fenceTestHooks.cache.has('k100')).toBe(true)
+    fenceTestHooks.cache.clear()
+  })
+
+  it('a cache hit refreshes recency, so hot fences survive eviction', () => {
+    fenceTestHooks.cache.clear()
+    for (let i = 0; i < 100; i++) fenceTestHooks.cacheSet(`k${i}`, [])
+    fenceTestHooks.cacheGet('k0')
+    fenceTestHooks.cacheSet('k100', [])
+    expect(fenceTestHooks.cache.has('k0')).toBe(true)
+    expect(fenceTestHooks.cache.has('k1')).toBe(false)
+    fenceTestHooks.cache.clear()
+  })
+
+  it('an edited fence keeps painting its last spans until retokenized', () => {
+    const before = 'const x = 1'
+    fenceTestHooks.cache.set(keyFor('js', before), [
+      { start: 0, end: 5, color: 'var(--shiki-token-keyword)' }
+    ])
+    // A hit records the spans against the fence's position…
+    specs('```js\nconst x = 1\n```')
+    fenceTestHooks.cache.clear()
+    // …so the very next keystroke (new content, cache miss) still paints.
+    const styled = specs('```js\nconst xx = 1\n```').filter((s) => s.kind === 'mark' && s.style)
+    expect(styled).toEqual([
+      { kind: 'mark', from: 6, to: 11, style: 'color: var(--shiki-token-keyword)' }
+    ])
+    fenceTestHooks.stale.clear()
+  })
+
+  it('stale spans are clamped when the fence content shrinks', () => {
+    const before = 'const x = 1'
+    fenceTestHooks.cache.set(keyFor('js', before), [
+      { start: 0, end: 11, color: 'var(--shiki-token-keyword)' }
+    ])
+    specs('```js\nconst x = 1\n```')
+    fenceTestHooks.cache.clear()
+    const styled = specs('```js\nab\n```').filter((s) => s.kind === 'mark' && s.style)
+    // Span end 11 would overrun the two-character content; it clamps to it.
+    expect(styled.map((s) => [s.from, s.to])).toEqual([[6, 8]])
+    fenceTestHooks.stale.clear()
+  })
 })
