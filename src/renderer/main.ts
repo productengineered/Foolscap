@@ -127,7 +127,9 @@ async function enterPreview(nearPos?: number): Promise<void> {
     // sees their document as text — never blank paper.
     await preview.show(editor.getContent(), currentDir, at)
     if (gen !== previewGen) {
+      // The stale show stole focus; hand it back to wherever the user went.
       preview.hide()
+      editor.view.focus()
       return
     }
     document.documentElement.classList.add('previewing')
@@ -171,7 +173,9 @@ const helpPreview = new Preview(() => helpPreview.hide())
 function toggleHelp(): void {
   if (helpPreview.visible) {
     helpPreview.hide()
-    editor.view.focus()
+    // Help can overlay the preview pane; scrolling must return to it.
+    if (preview.visible) preview.focus()
+    else editor.view.focus()
   } else {
     void helpPreview.show(helpMd, null, 0).catch(() => showToast('Help failed to render.'))
   }

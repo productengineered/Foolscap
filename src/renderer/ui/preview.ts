@@ -30,6 +30,10 @@ export class Preview {
   constructor(private readonly onEdit: (pos: number) => void) {
     this.el = document.createElement('div')
     this.el.className = 'preview'
+    /* The body scroll is locked (overflow: hidden) and hiding the editor
+     * drops focus to <body> — the pane itself must hold focus or Space,
+     * arrows, and PageDown scroll nothing. */
+    this.el.tabIndex = -1
     this.el.hidden = true
     document.body.append(this.el)
 
@@ -71,6 +75,7 @@ export class Preview {
     }
     this.el.hidden = false
     this.visible = true
+    this.focus()
     // Land near where the cursor was in the editor.
     if (nearPos > 0) this.scrollTo(nearPos, 'center')
     else this.el.scrollTop = 0
@@ -83,6 +88,10 @@ export class Preview {
     const stamps = candidates.map((c) => Number(c.dataset['pos']))
     const best = candidates[bestCoveringIndex(stamps, pos)]
     best?.scrollIntoView({ block })
+  }
+
+  focus(): void {
+    this.el.focus({ preventScroll: true })
   }
 
   hide(): void {
