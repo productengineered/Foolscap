@@ -81,6 +81,7 @@
   --dur-toast-update: 20000ms; /* once per version, so it can linger */
   --dur-wordcount-peek: 2000ms; /* §4.4: visible this long after mouse move */
   --dur-table-bar-hide: 350ms; /* grace period to reach the chip bar */
+  --dur-fence-idle: 150ms; /* typing pause before a fence retokenizes */
 
   /* ---- Shiki code tokens, from the same palette (§3: theme-bound) ----
    * These are the css-variables theme's hooks; because they reference the
