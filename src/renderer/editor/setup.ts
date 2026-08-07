@@ -10,6 +10,7 @@ import {
   type ViewUpdate
 } from '@codemirror/view'
 import { createFindPanel } from '../ui/find'
+import { formatKeymap } from './format-commands'
 import { docDirFacet, livePreview } from './live-preview/index'
 import { pasteImage } from './paste-image'
 import { tableKeymap, tableNormalizer } from './table-commands'
@@ -55,7 +56,7 @@ export function createEditor(parent: HTMLElement, hooks: EditorHooks): EditorHan
         EditorView.lineWrapping,
         markdown({ base: markdownLanguage }),
         search({ top: true, createPanel: createFindPanel }),
-        keymap.of([...tableKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+        keymap.of([...tableKeymap, ...formatKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) hooks.onDocChanged()
           hooks.onUpdate(update)

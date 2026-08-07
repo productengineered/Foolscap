@@ -36,6 +36,7 @@ Everything lives in the command palette — press `⌘K` and type.
 | `⌘K` | Command palette — everything is in here |
 | `⌘E` | Toggle preview (the fully rendered document) |
 | `⌘F` | Find & replace, regex optional |
+| `⌘B` / `⌘I` | Bold / italic (`⇧⌘X` strike, `⇧⌘C` code, `⇧⌘K` link) |
 | `⇧⌘O` | Outline panel — headings, click to jump |
 | `⌘N` | New window — every document gets its own |
 | `⌘O` | Open a file (or just drop one on the window) |
@@ -57,7 +58,11 @@ Double-click anywhere to drop into the editor exactly there. `⌘E` or
 - **Images** — paste a screenshot; it lands in an `assets/` folder next to
   your document with a relative link. Arrow into an image to see its
   markdown; arrow out to see the picture.
-- **Links** — `⌘`-click opens them in your browser.
+- **Emphasis** — `⌘B` and `⌘I` wrap the selection (or the word under the
+  caret) and unwrap it if it's already formatted. The buffer stays plain
+  markdown either way — the shortcut just types the stars for you.
+- **Links** — `⌘`-click opens them in your browser. `⇧⌘K` turns the
+  selection into `[text]()` with the caret waiting in the parens.
 - **Code** — fences highlight with real grammars, set in Ioskeley Mono.
 
 ## Appearance

@@ -42,6 +42,11 @@ export type MenuCommand =
   | 'text-smaller'
   | 'text-reset'
   | 'open-settings'
+  | 'format-bold'
+  | 'format-italic'
+  | 'format-strike'
+  | 'format-code'
+  | 'format-link'
 
 /* A newer released version, discovered by src/main/update-check.ts. */
 export interface UpdatePayload {

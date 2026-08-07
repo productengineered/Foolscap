@@ -95,6 +95,25 @@ export function installMenu(actions: MenuActions): void {
     { label: 'File', submenu: fileItems },
     { role: 'editMenu' },
     {
+      label: 'Format',
+      submenu: [
+        { label: 'Bold', accelerator: 'CmdOrCtrl+B', click: () => sendCommand('format-bold') },
+        { label: 'Italic', accelerator: 'CmdOrCtrl+I', click: () => sendCommand('format-italic') },
+        {
+          label: 'Strikethrough',
+          accelerator: 'Shift+CmdOrCtrl+X',
+          click: () => sendCommand('format-strike')
+        },
+        {
+          label: 'Inline Code',
+          accelerator: 'Shift+CmdOrCtrl+C',
+          click: () => sendCommand('format-code')
+        },
+        { type: 'separator' },
+        { label: 'Link', accelerator: 'Shift+CmdOrCtrl+K', click: () => sendCommand('format-link') }
+      ]
+    },
+    {
       // Deliberately not the viewMenu role: its Reload items would wipe the
       // buffer without passing the unsaved-changes guard.
       label: 'View',
