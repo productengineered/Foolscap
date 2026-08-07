@@ -1,4 +1,4 @@
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { search, searchKeymap } from '@codemirror/search'
 import { Compartment, EditorState } from '@codemirror/state'
@@ -55,7 +55,10 @@ export function createEditor(parent: HTMLElement, hooks: EditorHooks): EditorHan
         EditorView.lineWrapping,
         markdown({ base: markdownLanguage }),
         search({ top: true, createPanel: createFindPanel }),
-        keymap.of([...tableKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+        /* Tables own Tab first; indentWithTab catches the rest — without it
+         * Tab falls through to the browser's focus-move and the caret leaves
+         * the document. */
+        keymap.of([...tableKeymap, indentWithTab, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) hooks.onDocChanged()
           hooks.onUpdate(update)
