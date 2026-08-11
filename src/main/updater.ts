@@ -1,5 +1,6 @@
 import { app } from 'electron'
 import { autoUpdater } from 'electron-updater'
+import type { UpdateCheckOutcome } from '../shared/types'
 
 /* Hot updates over the GitHub Releases feed (ULTRAPLAN §7, unlocked by
  * code signing — Squirrel.Mac verifies the running app and the downloaded
@@ -39,4 +40,27 @@ export function startAutoUpdater(onReady: (info: UpdateReady) => void): void {
  * an update must never cost anyone an unsaved draft. */
 export function installAndRestart(): void {
   autoUpdater.quitAndInstall()
+}
+
+/* A check the user asked for by name (Help menu, Settings, palette) — the
+ * one context where silence is wrong. Resolves to something toastable in
+ * every case, including a re-check while an update is already en route
+ * (update-available fires again; the ready toast follows as usual). */
+export function checkNow(): Promise<UpdateCheckOutcome> {
+  if (!app.isPackaged) return Promise.resolve('dev-build')
+  return new Promise((resolve) => {
+    const done = (outcome: UpdateCheckOutcome): void => {
+      autoUpdater.off('update-available', onAvailable)
+      autoUpdater.off('update-not-available', onLatest)
+      autoUpdater.off('error', onError)
+      resolve(outcome)
+    }
+    const onAvailable = (): void => done('update-en-route')
+    const onLatest = (): void => done('up-to-date')
+    const onError = (): void => done('unreachable')
+    autoUpdater.on('update-available', onAvailable)
+    autoUpdater.on('update-not-available', onLatest)
+    autoUpdater.on('error', onError)
+    void autoUpdater.checkForUpdates().catch(() => done('unreachable'))
+  })
 }

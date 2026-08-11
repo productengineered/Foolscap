@@ -3,6 +3,7 @@ import { DROPPABLE_FILE, IPC, type AppCommand, type ConflictChoice } from '../sh
 import { readTextFile } from './files'
 import type { MenuActions } from './menu'
 import type { DocumentSession } from './session'
+import { checkNow } from './updater'
 
 export const OPENABLE_SCHEMES = new Set(['http:', 'https:', 'mailto:'])
 
@@ -52,6 +53,7 @@ export function registerIpc(
       void sessionFor(e.sender.id)?.openPath(path)
     }
   })
+  ipcMain.handle(IPC.updateCheck, () => checkNow())
   ipcMain.handle(IPC.loadCustomTheme, async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openFile'],

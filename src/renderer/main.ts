@@ -201,7 +201,24 @@ function loadCustomTheme(): void {
   })
 }
 
-const settings = new Settings({ modes, loadCustomTheme })
+/* A check the user asked for by name deserves an answer in every case —
+ * the background updater stays silent, this path never does. */
+function checkUpdatesNow(): void {
+  showToast('Checking for updates…')
+  void window.foolscap.checkForUpdates().then((outcome) => {
+    if (outcome === 'update-en-route') {
+      showToast('Update found — downloading now; a toast will land when it’s ready.')
+    } else if (outcome === 'up-to-date') {
+      showToast('Foolscap is up to date.')
+    } else if (outcome === 'dev-build') {
+      showToast('Running from source — updates arrive by git, not by toast.')
+    } else {
+      showToast('Couldn’t reach the update feed — try again later.')
+    }
+  })
+}
+
+const settings = new Settings({ modes, loadCustomTheme, checkForUpdates: checkUpdatesNow })
 
 /* Menu accelerators arrive here even while an overlay is up; formatting only
  * makes sense against a visible buffer with a caret in it. */
@@ -222,6 +239,7 @@ window.foolscap.onCommand((command) => {
   else if (command === 'text-smaller') adjustTextSize(-1)
   else if (command === 'text-reset') applyTextSize(null)
   else if (command === 'open-settings') settings.toggle()
+  else if (command === 'check-updates') checkUpdatesNow()
   else if (command === 'format-bold') formatInEditor(toggleBold)
   else if (command === 'format-italic') formatInEditor(toggleItalic)
   else if (command === 'format-strike') formatInEditor(toggleStrikethrough)
@@ -259,6 +277,7 @@ const paletteCommands = (): PaletteCommand[] => [
   { id: 'focus', title: 'Toggle Focus Mode', run: () => modes.toggleFocus() },
   { id: 'wordcount', title: 'Toggle Word Count', run: () => modes.toggleWordCount() },
   { id: 'settings', title: 'Settings…', hint: `${mod},`, run: () => settings.toggle() },
+  { id: 'check-updates', title: 'Check for Updates…', run: () => checkUpdatesNow() },
   { id: 'print', title: 'Print…', hint: `${mod}P`, run: () => window.foolscap.exec('file-print') },
   { id: 'text-larger', title: 'Text Size: Larger', hint: `${mod}+`, run: () => void adjustTextSize(1) },
   { id: 'text-smaller', title: 'Text Size: Smaller', hint: `${mod}−`, run: () => void adjustTextSize(-1) },

@@ -149,6 +149,11 @@ export function installMenu(actions: MenuActions): void {
           label: 'wtf is this?',
           accelerator: 'CmdOrCtrl+Shift+/',
           click: () => actions.help()
+        },
+        { type: 'separator' },
+        {
+          label: 'Check for Updates…',
+          click: () => sendCommand('check-updates')
         }
       ]
     }

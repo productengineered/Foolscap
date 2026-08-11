@@ -18,6 +18,7 @@ import {
 interface SettingsHooks {
   modes: Modes
   loadCustomTheme(): void
+  checkForUpdates(): void
 }
 
 export class Settings {
@@ -63,7 +64,13 @@ export class Settings {
     card.setAttribute('role', 'dialog')
     card.setAttribute('aria-label', 'Settings')
 
-    card.append(this.themeSection(), this.fontSection(), this.sizeSection(), this.modesSection())
+    card.append(
+      this.themeSection(),
+      this.fontSection(),
+      this.sizeSection(),
+      this.modesSection(),
+      this.updatesSection()
+    )
 
     this.overlay.replaceChildren(card)
   }
@@ -139,6 +146,17 @@ export class Settings {
       this.chip('Typewriter', modes.typewriter, () => modes.toggleTypewriter()),
       this.chip('Focus', modes.focus, () => modes.toggleFocus()),
       this.chip('Word count', modes.wordCount, () => modes.toggleWordCount())
+    )
+    return wrap
+  }
+
+  private updatesSection(): HTMLElement {
+    const { wrap, row } = this.section('Updates')
+    row.append(
+      this.chip('Check for updates now', false, () => {
+        this.close()
+        this.hooks.checkForUpdates()
+      })
     )
     return wrap
   }
