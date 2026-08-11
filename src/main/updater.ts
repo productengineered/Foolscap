@@ -19,18 +19,20 @@ export interface UpdateReady {
 
 const FOUR_HOURS = 4 * 60 * 60 * 1000
 
-export function startAutoUpdater(onReady: (info: UpdateReady) => void): void {
+export function startAutoUpdater(onReady: (info: UpdateReady) => boolean): void {
   if (!app.isPackaged) return
   autoUpdater.logger = null
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
   /* Re-checks (the 4-hour interval, manual checks) re-emit update-downloaded
-   * for an update already sitting in the cache — announce each version once. */
+   * for an update already sitting in the cache — announce each version once.
+   * But only a toast that reached a window counts as announced: a ready
+   * notice with no window to land in must retry on the next check, not be
+   * swallowed forever. (The old checker learned this the same way — #5.) */
   let announced: string | null = null
   autoUpdater.on('update-downloaded', (event) => {
     if (event.version === announced) return
-    announced = event.version
-    onReady({ version: event.version })
+    if (onReady({ version: event.version })) announced = event.version
   })
   autoUpdater.on('error', () => {
     // offline, rate-limited, feed missing — all fine, all silent

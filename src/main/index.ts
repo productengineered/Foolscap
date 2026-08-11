@@ -196,7 +196,9 @@ if (!gotLock) {
     // applies on quit — nothing is lost by silence.
     startAutoUpdater((info) => {
       const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-      if (win && !win.isDestroyed()) win.webContents.send(IPC.updateReady, info)
+      if (!win || win.isDestroyed()) return false
+      win.webContents.send(IPC.updateReady, info)
+      return true
     })
 
     // First launch on a new version — an update just installed, and the
