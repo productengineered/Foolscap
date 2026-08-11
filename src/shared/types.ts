@@ -48,11 +48,10 @@ export type MenuCommand =
   | 'format-code'
   | 'format-link'
 
-/* A newer released version, discovered by src/main/update-check.ts. */
+/* A new version, downloaded and verified by src/main/updater.ts — ready to
+ * install the moment the app restarts. */
 export interface UpdatePayload {
   version: string
-  /* Release page to open in the browser — unsigned builds notify, not install. */
-  url: string
 }
 
 /* Renderer-initiated commands (command palette) the main process executes. */
@@ -65,6 +64,7 @@ export type AppCommand =
   | 'export-html'
   | 'export-pdf'
   | 'file-print'
+  | 'update-restart'
 
 export const IPC = {
   // renderer → main
@@ -82,7 +82,7 @@ export const IPC = {
   saved: 'doc:saved',
   requestContent: 'doc:request-content',
   conflict: 'doc:conflict',
-  updateAvailable: 'app:update-available'
+  updateReady: 'app:update-ready'
 } as const
 
 /* The contextBridge surface. Implemented in src/preload/index.ts, consumed as
@@ -106,5 +106,5 @@ export interface FoolscapApi {
   onSaved(cb: (saved: SavedPayload) => void): void
   onRequestContent(cb: () => void): void
   onConflict(cb: () => void): void
-  onUpdateAvailable(cb: (update: UpdatePayload) => void): void
+  onUpdateReady(cb: (update: UpdatePayload) => void): void
 }

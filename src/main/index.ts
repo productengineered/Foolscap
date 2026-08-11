@@ -7,7 +7,7 @@ import { installMenu, type MenuActions } from './menu'
 import { DocumentSession } from './session'
 import { clearSession, loadSession, saveSession, type SessionEntry } from './session-store'
 import { IPC } from '../shared/types'
-import { scheduleUpdateCheck } from './update-check'
+import { installAndRestart, startAutoUpdater } from './updater'
 import { createWindow, installContentsGuards } from './window'
 
 const gotLock = app.requestSingleInstanceLock()
@@ -74,7 +74,8 @@ if (!gotLock) {
     open: () => {
       void (focusedSession() ?? boot()).openViaDialog()
     },
-    help: () => boot().showHelpWhenReady()
+    help: () => boot().showHelpWhenReady(),
+    updateRestart: () => void persistAndQuit(true)
   }
 
   const argvFilter = (): ArgvFilter => ({
@@ -111,7 +112,7 @@ if (!gotLock) {
   const sessionFile = (): string => join(app.getPath('userData'), 'session.json')
   let persistedQuit = false
 
-  const persistAndQuit = async (): Promise<void> => {
+  const persistAndQuit = async (installUpdate = false): Promise<void> => {
     const entries: SessionEntry[] = []
     for (const session of sessions.values()) {
       try {
@@ -128,7 +129,9 @@ if (!gotLock) {
     }
     persistedQuit = true
     for (const session of sessions.values()) session.allowSilentClose()
-    app.quit()
+    // Session is safe on disk either way; an update restart costs nothing.
+    if (installUpdate) installAndRestart()
+    else app.quit()
   }
 
   app.on('before-quit', (e) => {
@@ -186,15 +189,13 @@ if (!gotLock) {
       if (sessions.size === 0) boot()
     })
 
-    // Unsigned builds can't self-update on macOS (Squirrel.Mac refuses apps
-    // without a code signature), so ULTRAPLAN §7's electron-updater is
-    // benched until a Developer ID exists. Instead: check the repo's latest
-    // GitHub Release and offer one quiet toast in the focused window.
-    scheduleUpdateCheck((info) => {
+    // Hot updates (ULTRAPLAN §7, unlocked by code signing at v0.6.1):
+    // download quietly, toast once when ready, install on restart or on
+    // whatever quit comes naturally. No window to tell? The update still
+    // applies on quit — nothing is lost by silence.
+    startAutoUpdater((info) => {
       const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-      if (!win || win.isDestroyed()) return false
-      win.webContents.send(IPC.updateAvailable, info)
-      return true
+      if (win && !win.isDestroyed()) win.webContents.send(IPC.updateReady, info)
     })
   })
 

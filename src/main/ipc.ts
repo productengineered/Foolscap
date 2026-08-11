@@ -37,6 +37,8 @@ export function registerIpc(
         return void session?.exportPdf()
       case 'file-print':
         return void session?.printDoc()
+      case 'update-restart':
+        return actions.updateRestart()
     }
   })
   ipcMain.handle(IPC.pasteImage, (e, bytes: Uint8Array, ext: string) => {

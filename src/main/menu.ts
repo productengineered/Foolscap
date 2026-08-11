@@ -8,6 +8,8 @@ export interface MenuActions {
   newWindow(): void
   open(): void
   help(): void
+  /* Persist every session, then hand the process to the updater. */
+  updateRestart(): void
 }
 
 function sendCommand(command: MenuCommand): void {

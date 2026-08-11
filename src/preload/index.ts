@@ -27,7 +27,7 @@ const api: FoolscapApi = {
   onSaved: (cb) => ipcRenderer.on(IPC.saved, (_e, saved: SavedPayload) => cb(saved)),
   onRequestContent: (cb) => ipcRenderer.on(IPC.requestContent, () => cb()),
   onConflict: (cb) => ipcRenderer.on(IPC.conflict, () => cb()),
-  onUpdateAvailable: (cb) => ipcRenderer.on(IPC.updateAvailable, (_e, update: UpdatePayload) => cb(update))
+  onUpdateReady: (cb) => ipcRenderer.on(IPC.updateReady, (_e, update: UpdatePayload) => cb(update))
 }
 
 contextBridge.exposeInMainWorld('foolscap', api)

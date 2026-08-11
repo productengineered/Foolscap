@@ -58,27 +58,29 @@ export function showToast(message: string): void {
 /* A newer release exists. Main sends this at most once per version, so the
  * toast can afford to linger — but it is still a toast: dismissible,
  * non-modal, and it never comes back after "Later". */
-export function showUpdateToast(version: string, url: string): void {
+/* The update is downloaded, verified, and waiting. "Later" costs nothing:
+ * the update applies on whatever quit comes naturally. */
+export function showUpdateReadyToast(version: string, onRestart: () => void): void {
   const toast = document.createElement('div')
   toast.className = 'notice'
   toast.setAttribute('role', 'status')
 
   const label = document.createElement('span')
-  label.textContent = `Foolscap ${version} is out.`
+  label.textContent = `Foolscap ${version} is ready.`
 
-  const get = document.createElement('button')
-  get.className = 'primary'
-  get.textContent = 'See release'
-  get.addEventListener('click', () => {
-    window.foolscap.openExternal(url)
+  const restart = document.createElement('button')
+  restart.className = 'primary'
+  restart.textContent = 'Restart now'
+  restart.addEventListener('click', () => {
     toast.remove()
+    onRestart()
   })
 
   const later = document.createElement('button')
-  later.textContent = 'Later'
+  later.textContent = 'On next quit'
   later.addEventListener('click', () => toast.remove())
 
-  toast.append(label, get, later)
+  toast.append(label, restart, later)
   document.body.append(toast)
   setTimeout(() => toast.remove(), tokenMs('--dur-toast-update'))
 }

@@ -76,4 +76,4 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --verify-tag \
             --title "Foolscap ${GITHUB_REF_NAME#v}" --notes "" || true
           gh release upload "$GITHUB_REF_NAME" \
-            dist/*.dmg dist/*-mac.zip dist/*.blockmap --clobber
+            dist/*.dmg dist/*-mac.zip dist/*.blockmap dist/latest-mac.yml --clobber

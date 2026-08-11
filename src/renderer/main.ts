@@ -57,7 +57,7 @@ import {
   restoreTheme,
   THEMES
 } from './ui/modes'
-import { hideConflictBar, showConflictBar, showToast, showUpdateToast } from './ui/notice'
+import { hideConflictBar, showConflictBar, showToast, showUpdateReadyToast } from './ui/notice'
 import { Outline } from './ui/outline'
 import { Palette, type PaletteCommand } from './ui/palette'
 import { Preview } from './ui/preview'
@@ -413,7 +413,9 @@ window.foolscap.onConflict(() => {
   })
 })
 
-window.foolscap.onUpdateAvailable(({ version, url }) => showUpdateToast(version, url))
+window.foolscap.onUpdateReady(({ version }) =>
+  showUpdateReadyToast(version, () => window.foolscap.exec('update-restart'))
+)
 
 editor.view.focus()
 

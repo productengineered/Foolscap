@@ -51,8 +51,9 @@ for now.
 Grab the DMG from [Releases](https://github.com/seamoss/Foolscap/releases) —
 `arm64` for Apple Silicon, plain for Intel. Since **0.6.1**, builds are
 signed and notarized: drag to Applications and open like anything else.
-Foolscap checks Releases for newer versions and mentions them in a single
-quiet toast; it never installs anything itself.
+Since **0.7.0**, updates take care of themselves: Foolscap downloads new
+versions quietly, mentions it once in a toast when one is ready, and
+installs on restart — or on whatever quit comes naturally.
 
 (Releases before 0.6.1 were unsigned — if macOS grumbles about an old
 download, just grab a current one.)
