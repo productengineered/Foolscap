@@ -212,6 +212,8 @@ function checkUpdatesNow(): void {
       showToast('Foolscap is up to date.')
     } else if (outcome === 'dev-build') {
       showToast('Running from source — updates arrive by git, not by toast.')
+    } else if (outcome === 'mas-build') {
+      showToast('This copy updates through the App Store.')
     } else {
       showToast('Couldn’t reach the update feed — try again later.')
     }

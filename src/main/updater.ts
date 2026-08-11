@@ -20,7 +20,9 @@ export interface UpdateReady {
 const FOUR_HOURS = 4 * 60 * 60 * 1000
 
 export function startAutoUpdater(onReady: (info: UpdateReady) => boolean): void {
-  if (!app.isPackaged) return
+  // Mac App Store builds must not self-update (automatic rejection);
+  // the Store owns delivery there.
+  if (!app.isPackaged || process.mas) return
   autoUpdater.logger = null
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
@@ -56,6 +58,7 @@ export function installAndRestart(): void {
  * every case, including a re-check while an update is already en route
  * (update-available fires again; the ready toast follows as usual). */
 export function checkNow(): Promise<UpdateCheckResult> {
+  if (process.mas) return Promise.resolve({ outcome: 'mas-build', version: null })
   if (!app.isPackaged) return Promise.resolve({ outcome: 'dev-build', version: null })
   return new Promise((resolve) => {
     const done = (outcome: UpdateCheckOutcome, version: string | null = null): void => {

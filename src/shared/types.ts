@@ -56,7 +56,12 @@ export interface UpdatePayload {
 }
 
 /* What a user-initiated update check found; each maps to one toast. */
-export type UpdateCheckOutcome = 'update-en-route' | 'up-to-date' | 'unreachable' | 'dev-build'
+export type UpdateCheckOutcome =
+  | 'update-en-route'
+  | 'up-to-date'
+  | 'unreachable'
+  | 'dev-build'
+  | 'mas-build'
 
 export interface UpdateCheckResult {
   outcome: UpdateCheckOutcome

@@ -11,6 +11,7 @@ import {
 import { renderExportHtml } from './export/html'
 import { printDocument, renderPdf } from './export/pdf'
 import { atomicWriteFile, readTextFile, timestampName, watchFile } from './files'
+import { acquireAccess, ensureFolderAccess, rememberBookmark } from './scoped'
 import type { SessionEntry } from './session-store'
 import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
@@ -40,6 +41,8 @@ export class DocumentSession {
   private pendingPath: string | null = null
   private pendingRestore: SessionEntry | null = null
   private pendingHelp = false
+  /* mas: scoped-resource stopper for the current document; held while open. */
+  private stopScopedAccess: (() => void) | null = null
 
   constructor(
     private win: BrowserWindow,
@@ -105,6 +108,7 @@ export class DocumentSession {
     this.path = entry.path
     let disk: string | null = null
     if (entry.path) {
+      await this.scopeTo(entry.path)
       try {
         disk = await readTextFile(entry.path)
       } catch {
@@ -147,6 +151,7 @@ export class DocumentSession {
       return
     }
     if (!(await this.guardUnsaved())) return
+    await this.scopeTo(path)
     let content = ''
     try {
       content = await readTextFile(path)
@@ -168,10 +173,13 @@ export class DocumentSession {
   async openViaDialog(): Promise<void> {
     const result = await dialog.showOpenDialog(this.win, {
       properties: ['openFile'],
-      filters: [...MD_FILTERS, { name: 'All Files', extensions: ['*'] }]
+      filters: [...MD_FILTERS, { name: 'All Files', extensions: ['*'] }],
+      securityScopedBookmarks: true
     })
     const picked = result.filePaths[0]
-    if (!result.canceled && picked) await this.openPath(picked)
+    if (result.canceled || !picked) return
+    await rememberBookmark(picked, result.bookmarks?.[0])
+    await this.openPath(picked)
   }
 
   /* Save the buffer. Returns true on success, false if the user cancelled a
@@ -181,16 +189,29 @@ export class DocumentSession {
     if (saveAs || !target) {
       const result = await dialog.showSaveDialog(this.win, {
         defaultPath: target ?? join(app.getPath('documents'), 'Untitled.md'),
-        filters: MD_FILTERS
+        filters: MD_FILTERS,
+        securityScopedBookmarks: true
       })
       if (result.canceled || !result.filePath) return false
       target = result.filePath
+      await rememberBookmark(target, result.bookmark)
     }
     let content: string
     try {
       content = await this.getRendererContent()
     } catch (err) {
       dialog.showErrorBox('Save failed', `${target}\n\n${String(err)}`)
+      return false
+    }
+    // Atomic saves write a temp file beside the target — under the mas
+    // sandbox that needs the folder, not just the file.
+    if (
+      !(await ensureFolderAccess(
+        this.win,
+        dirname(target),
+        'Foolscap saves safely by writing a temporary file next to your document. Allow access to this folder.'
+      ))
+    ) {
       return false
     }
     this.unwatch()
@@ -241,6 +262,15 @@ export class DocumentSession {
    * Null for unsaved documents — no directory to be a sibling of. */
   async savePastedImage(bytes: Uint8Array, ext: string): Promise<string | null> {
     if (!this.path) return null
+    if (
+      !(await ensureFolderAccess(
+        this.win,
+        dirname(this.path),
+        'Pasted images live in an assets folder next to your document. Allow access to this folder.'
+      ))
+    ) {
+      return null
+    }
     const assetsDir = join(dirname(this.path), 'assets')
     await mkdir(assetsDir, { recursive: true })
     let name = timestampName('pasted', ext, new Date())
@@ -270,9 +300,22 @@ export class DocumentSession {
         this.path ? dirname(this.path) : app.getPath('documents'),
         `${this.docName()}.${ext}`
       ),
-      filters: [{ name: label, extensions: [ext] }]
+      filters: [{ name: label, extensions: [ext] }],
+      securityScopedBookmarks: true
     })
-    return result.canceled || !result.filePath ? null : result.filePath
+    if (result.canceled || !result.filePath) return null
+    await rememberBookmark(result.filePath, result.bookmark)
+    // Exports are atomic writes too; the temp file needs the folder.
+    if (
+      !(await ensureFolderAccess(
+        this.win,
+        dirname(result.filePath),
+        `Foolscap writes the ${label} safely via a temporary file in this folder. Allow access.`
+      ))
+    ) {
+      return null
+    }
+    return result.filePath
   }
 
   resolveConflict(choice: ConflictChoice): void {
@@ -283,6 +326,13 @@ export class DocumentSession {
   }
 
   /* ---- internals ---- */
+
+  /* Swap long-lived scoped access to follow the open document (mas no-op
+   * elsewhere). Released implicitly at process exit. */
+  private async scopeTo(path: string): Promise<void> {
+    this.stopScopedAccess?.()
+    this.stopScopedAccess = await acquireAccess(path)
+  }
 
   private load(content: string, dirty = false, reason: LoadReason = 'open'): void {
     if (this.win.isDestroyed()) return
