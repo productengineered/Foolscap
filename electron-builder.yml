@@ -3,7 +3,7 @@
 # secrets are present — see .github/workflows/release.yml.
 appId: com.foolscap.app
 productName: Foolscap
-copyright: © 2026 Seánan
+copyright: © 2026 HEAVYSTACK
 directories:
   buildResources: build
   output: dist
