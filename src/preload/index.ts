@@ -28,6 +28,7 @@ const api: FoolscapApi = {
   onRequestContent: (cb) => ipcRenderer.on(IPC.requestContent, () => cb()),
   onConflict: (cb) => ipcRenderer.on(IPC.conflict, () => cb()),
   onUpdateReady: (cb) => ipcRenderer.on(IPC.updateReady, (_e, update: UpdatePayload) => cb(update)),
+  onUpdatedTo: (cb) => ipcRenderer.on(IPC.updatedTo, (_e, version: string) => cb(version)),
   checkForUpdates: () => ipcRenderer.invoke(IPC.updateCheck)
 }
 

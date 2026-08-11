@@ -205,9 +205,9 @@ function loadCustomTheme(): void {
  * the background updater stays silent, this path never does. */
 function checkUpdatesNow(): void {
   showToast('Checking for updates…')
-  void window.foolscap.checkForUpdates().then((outcome) => {
+  void window.foolscap.checkForUpdates().then(({ outcome, version }) => {
     if (outcome === 'update-en-route') {
-      showToast('Update found — downloading now; a toast will land when it’s ready.')
+      showToast(`New version ${version} available! Downloading — a toast will land when it’s ready.`)
     } else if (outcome === 'up-to-date') {
       showToast('Foolscap is up to date.')
     } else if (outcome === 'dev-build') {
@@ -435,6 +435,8 @@ window.foolscap.onConflict(() => {
 window.foolscap.onUpdateReady(({ version }) =>
   showUpdateReadyToast(version, () => window.foolscap.exec('update-restart'))
 )
+
+window.foolscap.onUpdatedTo((version) => showToast(`Foolscap updated to ${version}.`))
 
 editor.view.focus()
 

@@ -45,14 +45,28 @@ export function hideConflictBar(): void {
   bar = null
 }
 
+/* Transient toasts hold a single slot: a new one replaces whatever is
+ * showing, so "Checking for updates…" morphs into its answer instead of
+ * stacking on top of it. The conflict bar is separate and never bumped. */
+let activeToast: HTMLElement | null = null
+
+function mountToast(toast: HTMLElement, lifetimeMs: number): void {
+  activeToast?.remove()
+  activeToast = toast
+  document.body.append(toast)
+  setTimeout(() => {
+    if (activeToast === toast) activeToast = null
+    toast.remove()
+  }, lifetimeMs)
+}
+
 /* Transient, self-dismissing notice for minor feedback. */
 export function showToast(message: string): void {
   const toast = document.createElement('div')
   toast.className = 'notice'
   toast.setAttribute('role', 'status')
   toast.textContent = message
-  document.body.append(toast)
-  setTimeout(() => toast.remove(), tokenMs('--dur-toast'))
+  mountToast(toast, tokenMs('--dur-toast'))
 }
 
 /* A newer release exists. Main sends this at most once per version, so the
@@ -81,6 +95,5 @@ export function showUpdateReadyToast(version: string, onRestart: () => void): vo
   later.addEventListener('click', () => toast.remove())
 
   toast.append(label, restart, later)
-  document.body.append(toast)
-  setTimeout(() => toast.remove(), tokenMs('--dur-toast-update'))
+  mountToast(toast, tokenMs('--dur-toast-update'))
 }

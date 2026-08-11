@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { autoUpdater } from 'electron-updater'
-import type { UpdateCheckOutcome } from '../shared/types'
+import type { UpdateCheckOutcome, UpdateCheckResult } from '../shared/types'
 
 /* Hot updates over the GitHub Releases feed (ULTRAPLAN §7, unlocked by
  * code signing — Squirrel.Mac verifies the running app and the downloaded
@@ -24,7 +24,14 @@ export function startAutoUpdater(onReady: (info: UpdateReady) => void): void {
   autoUpdater.logger = null
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
-  autoUpdater.on('update-downloaded', (event) => onReady({ version: event.version }))
+  /* Re-checks (the 4-hour interval, manual checks) re-emit update-downloaded
+   * for an update already sitting in the cache — announce each version once. */
+  let announced: string | null = null
+  autoUpdater.on('update-downloaded', (event) => {
+    if (event.version === announced) return
+    announced = event.version
+    onReady({ version: event.version })
+  })
   autoUpdater.on('error', () => {
     // offline, rate-limited, feed missing — all fine, all silent
   })
@@ -46,16 +53,16 @@ export function installAndRestart(): void {
  * one context where silence is wrong. Resolves to something toastable in
  * every case, including a re-check while an update is already en route
  * (update-available fires again; the ready toast follows as usual). */
-export function checkNow(): Promise<UpdateCheckOutcome> {
-  if (!app.isPackaged) return Promise.resolve('dev-build')
+export function checkNow(): Promise<UpdateCheckResult> {
+  if (!app.isPackaged) return Promise.resolve({ outcome: 'dev-build', version: null })
   return new Promise((resolve) => {
-    const done = (outcome: UpdateCheckOutcome): void => {
+    const done = (outcome: UpdateCheckOutcome, version: string | null = null): void => {
       autoUpdater.off('update-available', onAvailable)
       autoUpdater.off('update-not-available', onLatest)
       autoUpdater.off('error', onError)
-      resolve(outcome)
+      resolve({ outcome, version })
     }
-    const onAvailable = (): void => done('update-en-route')
+    const onAvailable = (info: { version: string }): void => done('update-en-route', info.version)
     const onLatest = (): void => done('up-to-date')
     const onError = (): void => done('unreachable')
     autoUpdater.on('update-available', onAvailable)

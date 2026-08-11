@@ -58,6 +58,12 @@ export interface UpdatePayload {
 /* What a user-initiated update check found; each maps to one toast. */
 export type UpdateCheckOutcome = 'update-en-route' | 'up-to-date' | 'unreachable' | 'dev-build'
 
+export interface UpdateCheckResult {
+  outcome: UpdateCheckOutcome
+  /* The version en route — null for every other outcome. */
+  version: string | null
+}
+
 /* Renderer-initiated commands (command palette) the main process executes. */
 export type AppCommand =
   | 'window-new'
@@ -87,7 +93,8 @@ export const IPC = {
   requestContent: 'doc:request-content',
   conflict: 'doc:conflict',
   updateReady: 'app:update-ready',
-  updateCheck: 'app:update-check'
+  updateCheck: 'app:update-check',
+  updatedTo: 'app:updated-to'
 } as const
 
 /* The contextBridge surface. Implemented in src/preload/index.ts, consumed as
@@ -112,6 +119,8 @@ export interface FoolscapApi {
   onRequestContent(cb: () => void): void
   onConflict(cb: () => void): void
   onUpdateReady(cb: (update: UpdatePayload) => void): void
+  /* First launch after an update installed — the victory-lap toast. */
+  onUpdatedTo(cb: (version: string) => void): void
   /* User-initiated check; resolves to a toastable outcome, never rejects. */
-  checkForUpdates(): Promise<UpdateCheckOutcome>
+  checkForUpdates(): Promise<UpdateCheckResult>
 }

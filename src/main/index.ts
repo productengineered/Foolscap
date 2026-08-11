@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { statSync } from 'node:fs'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathsFromArgv, type ArgvFilter } from './cli'
 import { registerIpc } from './ipc'
@@ -197,6 +198,32 @@ if (!gotLock) {
       const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
       if (win && !win.isDestroyed()) win.webContents.send(IPC.updateReady, info)
     })
+
+    // First launch on a new version — an update just installed, and the
+    // quiet machinery that did it earns one line: "Foolscap updated to X."
+    void (async () => {
+      const versionFile = join(app.getPath('userData'), 'last-version.json')
+      const current = app.getVersion()
+      let previous: string | null = null
+      try {
+        const raw = JSON.parse(await readFile(versionFile, 'utf8')) as { version?: unknown }
+        previous = typeof raw.version === 'string' ? raw.version : null
+      } catch {
+        // first run ever, or unreadable — either way, no toast
+      }
+      try {
+        await writeFile(versionFile, JSON.stringify({ version: current }))
+      } catch {
+        // best effort; worst case the toast repeats after the next update
+      }
+      if (previous && previous !== current) {
+        // Give the window time to exist and settle; a missed toast is fine.
+        setTimeout(() => {
+          const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+          if (win && !win.isDestroyed()) win.webContents.send(IPC.updatedTo, current)
+        }, 3000)
+      }
+    })()
   })
 
   app.on('window-all-closed', () => {
