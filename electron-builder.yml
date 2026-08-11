@@ -50,6 +50,9 @@ mas:
   entitlements: build/entitlements.mas.plist
   entitlementsInherit: build/entitlements.mas.inherit.plist
   provisioningProfile: build/foolscap-mas.provisionprofile
+  # Pinned: the keychain also holds an employer's distribution certs, and
+  # auto-discovery must never reach for those.
+  identity: SEANAN MC CULLOUGH (4J2T5H73JM)
   extendInfo:
     # Standard HTTPS only — skips App Store Connect's encryption questionnaire.
     ITSAppUsesNonExemptEncryption: false

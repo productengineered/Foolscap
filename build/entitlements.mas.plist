@@ -9,6 +9,11 @@
        writes. -->
   <key>com.apple.security.app-sandbox</key>
   <true/>
+  <!-- Must match the provisioning profile exactly or the app dies at spawn. -->
+  <key>com.apple.application-identifier</key>
+  <string>4J2T5H73JM.com.foolscap.app</string>
+  <key>com.apple.developer.team-identifier</key>
+  <string>4J2T5H73JM</string>
   <key>com.apple.security.files.user-selected.read-write</key>
   <true/>
   <key>com.apple.security.files.bookmarks.app-scope</key>
