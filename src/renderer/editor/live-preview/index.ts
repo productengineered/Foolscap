@@ -24,6 +24,7 @@ import { collectMarks, selectionTouches } from './marks'
 import { collectNods } from './nod'
 import { collectQuote } from './quote'
 import { collectRules } from './rules'
+import { collectTask } from './tasks'
 import { collectTable } from './tables'
 import { specWidget, type WidgetDesc } from './widgets'
 
@@ -144,6 +145,7 @@ export function collectActiveSpecs(
         collectListBullets(node, ctx)
         collectImages(node, ctx)
         collectRules(node, ctx)
+        collectTask(node, ctx)
       }
     })
     collectNods(tree, ctx)

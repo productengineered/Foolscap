@@ -356,6 +356,16 @@ body {
   margin: var(--space-paragraph) 0;
 }
 
+/* GFM task lists: themed checkboxes, no stray bullet beside them. */
+.preview-doc input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+
+.preview-doc li:has(> input[type='checkbox']) {
+  list-style: none;
+  margin-left: -1.2em;
+}
+
 .preview-doc h1,
 .preview-doc h2,
 .preview-doc h3,

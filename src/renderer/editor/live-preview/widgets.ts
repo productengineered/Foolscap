@@ -1,4 +1,4 @@
-import { WidgetType } from '@codemirror/view'
+import { WidgetType, type EditorView } from '@codemirror/view'
 import { NOD_SRC } from './nod'
 
 /* Collectors stay pure by describing widgets as data; this module turns the
@@ -11,6 +11,7 @@ export type WidgetDesc =
   | { type: 'hr' }
   | { type: 'image'; src: string | null; alt: string }
   | { type: 'nod' }
+  | { type: 'task'; checked: boolean; at: number }
 
 class BulletWidget extends WidgetType {
   override eq(): boolean {
@@ -109,6 +110,41 @@ class NodWidget extends WidgetType {
   }
 }
 
+class TaskWidget extends WidgetType {
+  constructor(
+    private readonly checked: boolean,
+    private readonly at: number
+  ) {
+    super()
+  }
+
+  override eq(other: TaskWidget): boolean {
+    return other.checked === this.checked && other.at === this.at
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const span = document.createElement('span')
+    span.className = 'fs-task'
+    const box = document.createElement('input')
+    box.type = 'checkbox'
+    box.checked = this.checked
+    box.setAttribute('aria-label', this.checked ? 'Mark task incomplete' : 'Mark task complete')
+    // Don't let the editor turn the press into a cursor move — the click
+    // must land on the checkbox, not park the caret inside the marker.
+    box.addEventListener('mousedown', (event) => event.preventDefault())
+    box.addEventListener('click', (event) => {
+      event.preventDefault()
+      // The buffer is the state: toggling is a three-character text edit.
+      view.dispatch({
+        changes: { from: this.at, to: this.at + 3, insert: this.checked ? '[ ]' : '[x]' }
+      })
+    })
+    span.append(box)
+    return span
+  }
+  // Default ignoreEvent() (true) stands: the widget owns its clicks.
+}
+
 const bullet = new BulletWidget()
 const hr = new HrWidget()
 const nod = new NodWidget()
@@ -122,6 +158,8 @@ export function specWidget(desc: WidgetDesc): WidgetType {
       return hr
     case 'nod':
       return nod
+    case 'task':
+      return new TaskWidget(desc.checked, desc.at)
     case 'image': {
       const key = `${desc.src ?? ''}\u0000${desc.alt}`
       let cached = imageCache.get(key)

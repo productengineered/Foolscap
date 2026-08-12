@@ -178,6 +178,15 @@ const editorTheme = EditorView.theme({
     fontVariationSettings: 'var(--vf-ui)'
   },
 
+  '.fs-task input': {
+    accentColor: 'var(--accent)',
+    width: '0.95em',
+    height: '0.95em',
+    verticalAlign: '-0.12em',
+    margin: '0',
+    cursor: 'pointer'
+  },
+
   '.fs-nod img': {
     display: 'inline-block',
     height: '1.05em',
