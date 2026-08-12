@@ -43,6 +43,7 @@
   .btn-primary { background: var(--accent); color: var(--paper); }
   .btn-ghost { border: 1px solid var(--rule); color: var(--ink-soft); }
   .btn-ghost small { display: block; font-size: 0.72rem; color: var(--ink-ghost); }
+  .stars { display: block; font-size: 0.72rem; color: var(--accent); }
   .shot { margin: 56px 0; }
   .shot img {
     width: 100%; border-radius: 12px; border: 1px solid var(--rule);
@@ -72,6 +73,7 @@
     <div class="buttons">
       <a class="btn btn-primary" href="https://github.com/seamoss/Foolscap/releases/latest">Download for Mac</a>
       <a class="btn btn-ghost" href="https://github.com/seamoss/Foolscap/releases/latest">Mac App&nbsp;Store <small>coming soon</small></a>
+      <a class="btn btn-ghost" href="https://github.com/seamoss/Foolscap">GitHub <span class="stars" id="gh-stars">★</span></a>
     </div>
   </header>
 
@@ -109,5 +111,15 @@
     <p style="margin-top:14px">MIT licensed · © 2026 HEAVYSTACK</p>
   </footer>
 </main>
+<script>
+  fetch('https://api.github.com/repos/seamoss/Foolscap')
+    .then((r) => (r.ok ? r.json() : null))
+    .then((repo) => {
+      if (repo && typeof repo.stargazers_count === 'number') {
+        document.getElementById('gh-stars').textContent = '★ ' + repo.stargazers_count.toLocaleString()
+      }
+    })
+    .catch(() => {}) // rate-limited or offline — the plain star stands in
+</script>
 </body>
 </html>
