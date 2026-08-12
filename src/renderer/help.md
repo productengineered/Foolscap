@@ -63,6 +63,8 @@ Double-click anywhere to drop into the editor exactly there. `⌘E` or
   markdown either way — the shortcut just types the stars for you.
 - **Links** — `⌘`-click opens them in your browser. `⇧⌘K` turns the
   selection into `[text]()` with the caret waiting in the parens.
+- **Task lists** — `- [ ]` becomes a checkbox you can actually click;
+  ticking it writes the `x` into your file, because the file is the truth.
 - **Code** — fences highlight with real grammars, set in Ioskeley Mono.
 
 ## Appearance
