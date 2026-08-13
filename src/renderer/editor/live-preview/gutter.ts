@@ -9,19 +9,23 @@ export interface BlockGlyph {
 
 const HEADING = /^(ATXHeading[1-6]|SetextHeading[12])$/
 
-function glyphFor(node: SyntaxNode): string | null {
+function glyphFor(node: SyntaxNode, doc: Text): string | null {
   if (HEADING.test(node.name)) return '#'
   if (node.name === 'Blockquote') return '>'
   if (node.name === 'FencedCode' || node.name === 'CodeBlock') return '~'
   if (node.name === 'ListItem') {
-    return node.parent?.name === 'OrderedList' ? '1.' : '•'
+    if (node.parent?.name !== 'OrderedList') return '•'
+    // The item's own marker, read from the text — a fixed '1.' would sit in
+    // the gutter contradicting the '2.' on the line beside it.
+    const mark = node.getChild('ListMark')
+    return mark ? doc.sliceString(mark.from, mark.to) : '1.'
   }
   return null
 }
 
 function walkUp(start: SyntaxNode, doc: Text): BlockGlyph | null {
   for (let node: SyntaxNode | null = start; node; node = node.parent) {
-    const glyph = glyphFor(node)
+    const glyph = glyphFor(node, doc)
     if (glyph) return { glyph, lineFrom: doc.lineAt(node.from).from }
   }
   return null
