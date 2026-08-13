@@ -25,8 +25,13 @@ describe('glyphForPos — block-type glyph for the gutter', () => {
     expect(glyphAt('- item one\n- item two', 3)).toEqual({ glyph: '•', lineFrom: 0 })
   })
 
-  it('ordered list item → 1.', () => {
-    expect(glyphAt('1. first\n2. second', 12)).toEqual({ glyph: '1.', lineFrom: 9 })
+  it('ordered list item → its own number, not a fixed 1.', () => {
+    expect(glyphAt('1. first\n2. second', 4)).toEqual({ glyph: '1.', lineFrom: 0 })
+    expect(glyphAt('1. first\n2. second', 12)).toEqual({ glyph: '2.', lineFrom: 9 })
+  })
+
+  it('ordered glyph keeps the marker delimiter and multiple digits', () => {
+    expect(glyphAt('9) nine\n10) ten', 12)).toEqual({ glyph: '10)', lineFrom: 8 })
   })
 
   it('fenced code → ~', () => {
