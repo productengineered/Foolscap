@@ -190,16 +190,18 @@ if (!gotLock) {
       if (sessions.size === 0) boot()
     })
 
-    // Hot updates (ULTRAPLAN §7, unlocked by code signing at v0.6.1):
-    // download quietly, toast once when ready, install on restart or on
-    // whatever quit comes naturally. No window to tell? The update still
-    // applies on quit — nothing is lost by silence.
-    startAutoUpdater((info) => {
-      const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-      if (!win || win.isDestroyed()) return false
-      win.webContents.send(IPC.updateReady, info)
-      return true
-    })
+    // Fork build: the background updater stays off — it would poll the
+    // upstream feed unprompted and auto-download upstream releases over
+    // this build's own features. The manual check (Help menu, Settings,
+    // palette) still works; updating means pulling upstream and rebuilding.
+    if (process.env['FOOLSCAP_AUTO_UPDATE'] === '1') {
+      startAutoUpdater((info) => {
+        const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+        if (!win || win.isDestroyed()) return false
+        win.webContents.send(IPC.updateReady, info)
+        return true
+      })
+    }
 
     // First launch on a new version — an update just installed, and the
     // quiet machinery that did it earns one line: "Foolscap updated to X."
