@@ -347,7 +347,7 @@ body {
 }
 
 .preview-doc {
-  max-width: var(--measure);
+  max-width: var(--measure-app);
   margin: 0 auto;
   padding: 3rem 1rem 6rem;
 }
@@ -475,6 +475,9 @@ body {
   border: 1px solid var(--rule);
   padding: 0.35em 0.7em;
   text-align: left;
+  /* Tables lay out fixed with draggable column ratios; long unbroken
+   * content (IDs, URLs) must wrap inside its column, not overflow it. */
+  overflow-wrap: break-word;
 }
 
 .preview-doc th {

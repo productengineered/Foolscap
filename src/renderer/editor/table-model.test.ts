@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  adjustColumnWidth,
   cellRangesOfLine,
+  columnDisplayWidth,
+  columnWidth,
+  setColumnWidth,
+  tableSourceAt,
   cycleAlign,
   deleteColumn,
+  formatTable,
   insertColumn,
   insertRow,
   isDelimiterRow,
@@ -16,6 +22,8 @@ const MESSY = `| Name | Qty | Price |
 | apple | 3 | 1.20 |
 | pear      | 12 | 0.85 |`
 
+/* Minimal delimiters (three dashes or fewer) carry no width intent, so a
+ * messy hand-typed table still tightens to its content. */
 const CLEAN = `| Name  | Qty | Price |
 | ----- | :-: | ----: |
 | apple |  3  |  1.20 |
@@ -55,6 +63,14 @@ describe('parseTable', () => {
     const m = parseTable('  | a |\n  | --- |\n  | 1 |')
     expect(m.indent).toBe('  ')
   })
+
+  it('treats minimal delimiters as carrying no width intent', () => {
+    expect(parseTable(MESSY).widths).toEqual([0, 0, 0])
+  })
+
+  it('reads long dash runs as recorded column widths', () => {
+    expect(parseTable('| a | b |\n| -------- | :------: |\n| x | y |').widths).toEqual([8, 8])
+  })
 })
 
 describe('isDelimiterRow', () => {
@@ -83,6 +99,76 @@ describe('formatTable / normalizeTable', () => {
   it('right-aligned columns pad on the left', () => {
     const out = normalizeTable('| n |\n| ---: |\n| 7 |\n| 1234 |')
     expect(out).toContain('|    7 |')
+  })
+
+  it('keeps a delimiter wider than its content (a widened column)', () => {
+    const wide = '| a        | b   |\n| -------- | --- |\n| x        | y   |'
+    expect(normalizeTable(wide)).toBe(wide)
+  })
+})
+
+describe('adjustColumnWidth', () => {
+  const model = parseTable(CLEAN)
+
+  it('widens by growing the delimiter row, survives normalize', () => {
+    const widened = formatTable(adjustColumnWidth(model, 0, 4))
+    // Name is 5 wide from content; +4 lands at 9.
+    expect(widened.split('\n')[1]).toBe('| --------- | :-: | ----: |')
+    expect(normalizeTable(widened)).toBe(widened)
+  })
+
+  it('narrowing below the content width lands on the content width', () => {
+    const widened = adjustColumnWidth(model, 0, 6)
+    const back = adjustColumnWidth(widened, 0, -20)
+    expect(columnWidth(back, 0)).toBe(5)
+    expect(formatTable(back)).toBe(CLEAN)
+  })
+
+  it('ignores out-of-range columns', () => {
+    expect(adjustColumnWidth(model, 7, 2)).toBe(model)
+  })
+})
+
+describe('setColumnWidth', () => {
+  const model = parseTable(CLEAN)
+
+  it('sets the recorded width outright', () => {
+    expect(columnWidth(setColumnWidth(model, 0, 12), 0)).toBe(12)
+  })
+
+  it('targets below the content width land on the content width', () => {
+    const m = setColumnWidth(model, 0, 1)
+    expect(columnWidth(m, 0)).toBe(5)
+    expect(formatTable(m)).toBe(CLEAN)
+  })
+
+  it('ignores out-of-range columns', () => {
+    expect(setColumnWidth(model, 7, 12)).toBe(model)
+  })
+
+  it('records widths narrower than the content in the delimiter row', () => {
+    const wide = parseTable('| header cell one | b |\n| --------------- | --- |\n| x | y |')
+    const out = formatTable(setColumnWidth(wide, 0, 8))
+    // Text cells can't shrink below their content; the delimiter can.
+    expect(out.split('\n')[0]).toBe('| header cell one | b   |')
+    expect(out.split('\n')[1]).toBe('| -------- | --- |')
+    expect(columnDisplayWidth(parseTable(out), 0)).toBe(8)
+    expect(normalizeTable(out)).toBe(out)
+  })
+})
+
+describe('tableSourceAt', () => {
+  const doc = '# Title\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\nafter'
+
+  it('recovers the table text from its start offset', () => {
+    const from = doc.indexOf('| a')
+    const source = tableSourceAt(doc, from)
+    expect(source?.text).toBe('| a | b |\n| --- | --- |\n| 1 | 2 |')
+    expect(source ? doc.slice(from, source.to) : '').toBe(source?.text)
+  })
+
+  it('returns null off a table', () => {
+    expect(tableSourceAt(doc, 0)).toBeNull()
   })
 })
 

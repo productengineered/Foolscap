@@ -1,4 +1,11 @@
 import { resolveImageSrc } from '../editor/live-preview/images'
+import {
+  columnDisplayWidth,
+  formatTable,
+  parseTable,
+  setColumnWidth,
+  tableSourceAt
+} from '../editor/table-model'
 import { renderMarkdown } from '../../shared/markdown'
 
 /* Index of the stamp best covering pos: the largest one <= pos. DOM order is
@@ -21,13 +28,40 @@ export function bestCoveringIndex(positions: readonly number[], pos: number): nu
  * preview is exactly what HTML and PDF export produce. Read-only by nature;
  * double-clicking any element drops back into the editor at that element's
  * source position (the data-pos stamps). Links open externally instead of
- * navigating the window. */
+ * navigating the window.
+ *
+ * The one interactive exception: table column edges. Tables render with
+ * their columns proportioned by the model's display widths, and dragging a
+ * boundary between two columns redistributes them — written back to the
+ * markdown source through the applyEdit hook (absent for the help pane,
+ * which is genuinely read-only). */
+
+interface ColumnResize {
+  cols: HTMLTableColElement[]
+  left: number
+  startX: number
+  tablePx: number
+  startPct: number[]
+  totalChars: number
+  from: number
+  to: number
+  lastDelta: number
+  onMove: (e: MouseEvent) => void
+  onUp: () => void
+}
 
 export class Preview {
   private readonly el: HTMLElement
   visible = false
 
-  constructor(private readonly onEdit: (pos: number) => void) {
+  private markdown = ''
+  private docDir: string | null = null
+  private resize: ColumnResize | null = null
+
+  constructor(
+    private readonly onEdit: (pos: number) => void,
+    private readonly applyEdit?: (from: number, to: number, insert: string) => string | null
+  ) {
     this.el = document.createElement('div')
     this.el.className = 'preview'
     /* The body scroll is locked (overflow: hidden) and hiding the editor
@@ -61,24 +95,39 @@ export class Preview {
       }
       window.foolscap.openExternal(link.href)
     })
+
+    if (this.applyEdit) {
+      this.el.addEventListener('mousemove', (event) => {
+        if (this.resize) return
+        this.el.style.cursor = this.boundaryUnder(event) ? 'col-resize' : ''
+      })
+      this.el.addEventListener('mousedown', (event) => this.startResize(event))
+    }
   }
 
   async show(markdown: string, docDir: string | null, nearPos: number): Promise<void> {
-    const html = await renderMarkdown(markdown, { sourcePositions: true })
-    this.el.innerHTML = `<main class="preview-doc">${html}</main>`
-    // The pipeline escapes raw HTML, so this is our own output only.
-    for (const img of this.el.querySelectorAll('img')) {
-      const src = img.getAttribute('src')
-      const resolved = src ? resolveImageSrc(src, docDir) : null
-      if (resolved) img.src = resolved
-      else img.removeAttribute('src')
-    }
+    this.markdown = markdown
+    this.docDir = docDir
+    await this.render()
     this.el.hidden = false
     this.visible = true
     this.focus()
     // Land near where the cursor was in the editor.
     if (nearPos > 0) this.scrollTo(nearPos, 'center')
     else this.el.scrollTop = 0
+  }
+
+  private async render(): Promise<void> {
+    const html = await renderMarkdown(this.markdown, { sourcePositions: true })
+    this.el.innerHTML = `<main class="preview-doc">${html}</main>`
+    // The pipeline escapes raw HTML, so this is our own output only.
+    for (const img of this.el.querySelectorAll('img')) {
+      const src = img.getAttribute('src')
+      const resolved = src ? resolveImageSrc(src, this.docDir) : null
+      if (resolved) img.src = resolved
+      else img.removeAttribute('src')
+    }
+    this.sizeTables()
   }
 
   /* Scroll the rendered pane to the element covering a source position —
@@ -97,5 +146,125 @@ export class Preview {
   hide(): void {
     this.el.hidden = true
     this.visible = false
+  }
+
+  /* ---- table columns: proportioned by the model, draggable at edges ---- */
+
+  /* Fixed-layout every table with a colgroup whose percentages mirror the
+   * source model's display widths, so a column resized in either mode
+   * renders at its recorded proportion here. */
+  private sizeTables(): void {
+    for (const table of this.el.querySelectorAll<HTMLTableElement>('table[data-pos]')) {
+      const source = tableSourceAt(this.markdown, Number(table.dataset['pos']))
+      if (!source) continue
+      const model = parseTable(source.text)
+      const weights = model.header.map((_, i) => columnDisplayWidth(model, i))
+      const total = weights.reduce((a, b) => a + b, 0)
+      if (weights.length === 0 || total <= 0) continue
+      const colgroup = document.createElement('colgroup')
+      for (const weight of weights) {
+        const col = document.createElement('col')
+        col.style.width = `${((weight / total) * 100).toFixed(3)}%`
+        colgroup.append(col)
+      }
+      table.prepend(colgroup)
+      table.style.tableLayout = 'fixed'
+      table.style.width = '100%'
+    }
+  }
+
+  /* The column boundary under the pointer: within a few px of the edge
+   * between two cells. The table's outer edges are not boundaries. */
+  private boundaryUnder(event: MouseEvent): { table: HTMLTableElement; left: number } | null {
+    const target = event.target instanceof Element ? event.target : null
+    const cell = target?.closest<HTMLTableCellElement>('td, th')
+    const table = cell?.closest('table')
+    if (!cell || !table || table.dataset['pos'] === undefined) return null
+    const row = cell.parentElement
+    if (!(row instanceof HTMLTableRowElement)) return null
+    const rect = cell.getBoundingClientRect()
+    if (cell.cellIndex < row.cells.length - 1 && rect.right - event.clientX <= 5) {
+      return { table, left: cell.cellIndex }
+    }
+    if (cell.cellIndex > 0 && event.clientX - rect.left <= 5) {
+      return { table, left: cell.cellIndex - 1 }
+    }
+    return null
+  }
+
+  private startResize(event: MouseEvent): void {
+    if (event.button !== 0 || this.resize || !this.applyEdit) return
+    const boundary = this.boundaryUnder(event)
+    if (!boundary) return
+    const from = Number(boundary.table.dataset['pos'])
+    const source = tableSourceAt(this.markdown, from)
+    const cols = [...boundary.table.querySelectorAll<HTMLTableColElement>('col')]
+    if (!source || cols.length === 0) return
+    const model = parseTable(source.text)
+    if (cols.length !== model.header.length || boundary.left >= model.header.length - 1) return
+    event.preventDefault()
+    const weights = model.header.map((_, i) => columnDisplayWidth(model, i))
+    const total = weights.reduce((a, b) => a + b, 0)
+    if (total <= 0) return
+    const onMove = (e: MouseEvent): void => this.moveResize(e)
+    const onUp = (): void => void this.endResize()
+    this.resize = {
+      cols,
+      left: boundary.left,
+      startX: event.clientX,
+      tablePx: Math.max(1, boundary.table.getBoundingClientRect().width),
+      startPct: weights.map((w) => (w / total) * 100),
+      totalChars: total,
+      from,
+      to: source.to,
+      lastDelta: 0,
+      onMove,
+      onUp
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    document.body.style.cursor = 'col-resize'
+  }
+
+  /* Width moves between the two neighbors; the table's own width holds. */
+  private moveResize(e: MouseEvent): void {
+    const resize = this.resize
+    if (!resize) return
+    const raw = ((e.clientX - resize.startX) / resize.tablePx) * 100
+    const min = (6 / resize.totalChars) * 100
+    const leftPct = resize.startPct[resize.left] ?? 0
+    const rightPct = resize.startPct[resize.left + 1] ?? 0
+    const delta = Math.max(min - leftPct, Math.min(rightPct - min, raw))
+    resize.lastDelta = delta
+    const colLeft = resize.cols[resize.left]
+    const colRight = resize.cols[resize.left + 1]
+    if (colLeft) colLeft.style.width = `${(leftPct + delta).toFixed(3)}%`
+    if (colRight) colRight.style.width = `${(rightPct - delta).toFixed(3)}%`
+  }
+
+  private async endResize(): Promise<void> {
+    const resize = this.resize
+    if (!resize) return
+    this.resize = null
+    window.removeEventListener('mousemove', resize.onMove)
+    window.removeEventListener('mouseup', resize.onUp)
+    document.body.style.cursor = ''
+    if (resize.lastDelta === 0 || !this.applyEdit) return
+    const leftPct = (resize.startPct[resize.left] ?? 0) + resize.lastDelta
+    const rightPct = (resize.startPct[resize.left + 1] ?? 0) - resize.lastDelta
+    const source = tableSourceAt(this.markdown, resize.from)
+    if (!source) return
+    let model = parseTable(source.text)
+    model = setColumnWidth(model, resize.left, (leftPct / 100) * resize.totalChars)
+    model = setColumnWidth(model, resize.left + 1, (rightPct / 100) * resize.totalChars)
+    const next = formatTable(model)
+    if (next === source.text) return
+    const updated = this.applyEdit(resize.from, resize.to, next)
+    if (updated === null) return
+    // Re-render: the table's new source length shifts every later data-pos.
+    this.markdown = updated
+    const scroll = this.el.scrollTop
+    await this.render()
+    this.el.scrollTop = scroll
   }
 }
