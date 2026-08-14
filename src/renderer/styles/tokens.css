@@ -31,7 +31,12 @@
   --weight-mark-ghost: 320;
 
   /* ---- Metrics ---- */
-  --measure: 68ch; /* hard cap, not a pixel width */
+  --measure: 68ch; /* fixed cap for exports (print has no window) */
+  /* App text column: tracks the window width, keeping a breathing margin at
+   * each edge so text never runs to the chrome. The inset shrinks on small
+   * windows; the 40ch floor guards degenerate sizes. */
+  --page-inset: min(6rem, 5vw);
+  --measure-app: max(40ch, calc(100vw - 2 * var(--page-inset)));
   --font-size-body: 17px; /* user-adjustable 14–22 later */
   --leading-body: 1.7;
   --space-paragraph: 0.9em;

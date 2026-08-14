@@ -347,7 +347,7 @@ body {
 }
 
 .preview-doc {
-  max-width: var(--measure);
+  max-width: var(--measure-app);
   margin: 0 auto;
   padding: 3rem 1rem 6rem;
 }
