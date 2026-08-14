@@ -5,6 +5,16 @@ layout and multi-document features on top of upstream. Upstream's rule that
 the buffer is always plain markdown text is preserved throughout — every
 feature below round-trips through standard GFM.
 
+## 0.13.1 — 2026-08-14
+
+### The title bar has room to breathe
+
+- The bar was sized to the traffic lights, but macOS parks those low within
+  it, which left the tabs and the document title pressed against the content
+  below and only a few pixels under the buttons. It's deeper now, and the tab
+  strip starts further clear of the buttons. Both are single values in
+  `tokens.css`; everything under the chrome keys off them.
+
 ## 0.13.0 — 2026-08-14
 
 ### Files from outside reuse the window on your desktop
