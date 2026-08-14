@@ -11,6 +11,10 @@ export interface TableModel {
   indent: string
   header: string[]
   align: Align[]
+  /* Per-column minimum width, carried by the delimiter row's cell length.
+   * GFM ignores dash count, so a widened column is still a proper pipe
+   * table everywhere, and the width lives in the file itself. */
+  widths: number[]
   rows: string[][]
 }
 
@@ -48,6 +52,16 @@ function delimiterAlign(cell: string): Align {
   return null
 }
 
+/* A delimiter cell records a column width when its dash run is longer than
+ * the minimal hand-typed forms (---, :---, ---:, :---:). GFM ignores dash
+ * count, so the run is a free channel: our formatter writes the recorded
+ * width there, and a hand-padded delimiter matching its column says the
+ * same thing. Short runs mean "no opinion" — the content decides. */
+function recordedWidth(cell: string): number {
+  const dashes = cell.length - (cell.startsWith(':') ? 1 : 0) - (cell.endsWith(':') ? 1 : 0)
+  return dashes >= 4 ? cell.length : 0
+}
+
 export function isDelimiterRow(line: string): boolean {
   const cells = splitRow(line)
   return cells.length > 0 && cells.every((c) => DELIMITER_CELL.test(c))
@@ -57,10 +71,9 @@ export function parseTable(text: string): TableModel {
   const lines = text.split('\n').filter((l) => l.trim() !== '')
   const indent = /^[ \t]*/.exec(lines[0] ?? '')?.[0] ?? ''
   const header = splitRow(lines[0] ?? '')
-  const align: Align[] =
-    lines.length > 1 && isDelimiterRow(lines[1] ?? '')
-      ? splitRow(lines[1] ?? '').map(delimiterAlign)
-      : header.map(() => null)
+  const delimiter =
+    lines.length > 1 && isDelimiterRow(lines[1] ?? '') ? splitRow(lines[1] ?? '') : null
+  const align: Align[] = delimiter ? delimiter.map(delimiterAlign) : header.map(() => null)
   const rows = lines.slice(2).map(splitRow)
 
   // Column count is fixed by the widest of header/delimiter; rows are
@@ -72,6 +85,7 @@ export function parseTable(text: string): TableModel {
     indent,
     header: fit(header),
     align: Array.from({ length: columns }, (_, i) => align[i] ?? null),
+    widths: Array.from({ length: columns }, (_, i) => recordedWidth(delimiter?.[i] ?? '')),
     rows: rows.map(fit)
   }
 }
@@ -98,20 +112,39 @@ function delimiterCell(align: Align, target: number): string {
   return dashes(target)
 }
 
+/* Width formatTable pads column `at` to: its widest content, but never
+ * narrower than a recorded width above it — that's what lets a
+ * user-widened column survive normalization and a file round-trip. */
+export function columnWidth(model: TableModel, at: number): number {
+  let max = Math.max(3, model.widths[at] ?? 0, width(model.header[at] ?? ''))
+  for (const row of model.rows) max = Math.max(max, width(row[at] ?? ''))
+  return max
+}
+
+/* Width the column *reads* as: the recorded intent when present — even one
+ * narrower than the content, which text padding can't express — else the
+ * content width. Preview column ratios come from this. */
+export function columnDisplayWidth(model: TableModel, at: number): number {
+  const recorded = model.widths[at] ?? 0
+  if (recorded > 0) return Math.max(3, recorded)
+  return columnWidth(model, at)
+}
+
 export function formatTable(model: TableModel): string {
   const columns = model.header.length
-  const widths = Array.from({ length: columns }, (_, i) => {
-    let max = Math.max(3, width(model.header[i] ?? ''))
-    for (const row of model.rows) max = Math.max(max, width(row[i] ?? ''))
-    return max
-  })
+  const widths = Array.from({ length: columns }, (_, i) => columnWidth(model, i))
   const line = (cells: string[]): string =>
     `${model.indent}| ${cells.join(' | ')} |`
   const headerLine = line(
     model.header.map((c, i) => pad(c, widths[i] ?? 3, model.align[i] ?? null))
   )
+  // The delimiter carries the recorded width verbatim — shorter than the
+  // padded cells when a column was narrowed below its content.
   const delimiterLine = line(
-    model.align.map((a, i) => delimiterCell(a, widths[i] ?? 3))
+    model.align.map((a, i) => {
+      const recorded = model.widths[i] ?? 0
+      return delimiterCell(a, recorded > 0 ? recorded : (widths[i] ?? 3))
+    })
   )
   const rowLines = model.rows.map((row) =>
     line(row.map((c, i) => pad(c, widths[i] ?? 3, model.align[i] ?? null)))
@@ -194,6 +227,7 @@ export function insertColumn(model: TableModel, at: number): TableModel {
     ...model,
     header: splice(model.header, ''),
     align: splice(model.align, null),
+    widths: splice(model.widths, 0),
     rows: model.rows.map((row) => splice(row, ''))
   }
 }
@@ -205,8 +239,55 @@ export function deleteColumn(model: TableModel, at: number): TableModel {
     ...model,
     header: remove(model.header),
     align: remove(model.align),
+    widths: remove(model.widths),
     rows: model.rows.map(remove)
   }
+}
+
+export const COLUMN_WIDTH_STEP = 2
+
+/* Set the column's recorded width outright. Below 6 the intent can't
+ * survive the delimiter encoding (a short dash run reads as a hand-typed
+ * minimal delimiter), so it clears instead — the content decides again. */
+export function setColumnWidth(model: TableModel, at: number, target: number): TableModel {
+  if (at < 0 || at >= model.header.length) return model
+  const rounded = Math.round(target)
+  const clamped = rounded >= 6 ? rounded : 0
+  return {
+    ...model,
+    widths: Array.from({ length: model.header.length }, (_, i) =>
+      i === at ? clamped : (model.widths[i] ?? 0)
+    )
+  }
+}
+
+/* Set the column's recorded width relative to its current display width. */
+export function adjustColumnWidth(model: TableModel, at: number, delta: number): TableModel {
+  if (at < 0 || at >= model.header.length) return model
+  return setColumnWidth(model, at, columnDisplayWidth(model, at) + delta)
+}
+
+/* The consecutive pipe-carrying lines starting at `from` — a rendered
+ * table's source text, recovered from its data-pos stamp. Null unless at
+ * least a header and delimiter line are present. */
+export function tableSourceAt(
+  markdown: string,
+  from: number
+): { text: string; to: number } | null {
+  let at = from
+  let end = from
+  let count = 0
+  while (at < markdown.length) {
+    const nl = markdown.indexOf('\n', at)
+    const lineEnd = nl === -1 ? markdown.length : nl
+    const line = markdown.slice(at, lineEnd)
+    if (line.trim() === '' || !line.includes('|')) break
+    count++
+    end = lineEnd
+    if (nl === -1) break
+    at = nl + 1
+  }
+  return count >= 2 ? { text: markdown.slice(from, end), to: end } : null
 }
 
 const ALIGN_CYCLE: Align[] = [null, 'left', 'center', 'right']

@@ -118,7 +118,20 @@ new TableControls(editor.view)
 
 /* ---- Preview mode ---- */
 
-const preview = new Preview((pos) => exitPreview(pos))
+const preview = new Preview(
+  (pos) => exitPreview(pos),
+  // Table-resize write-back: apply the change to the (hidden) editor doc
+  // and hand the preview the updated source to re-render from.
+  (from, to, insert) => {
+    const doc = editor.view.state.doc
+    if (from < 0 || to > doc.length || from > to) return null
+    editor.view.dispatch({
+      changes: { from, to, insert },
+      userEvent: 'input'
+    })
+    return editor.view.state.doc.toString()
+  }
+)
 
 /* The render is async, so "previewing" is three states, not two: hidden,
  * entering (render in flight), shown. The generation counter lets exit
