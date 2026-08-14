@@ -5,6 +5,26 @@ layout and multi-document features on top of upstream. Upstream's rule that
 the buffer is always plain markdown text is preserved throughout — every
 feature below round-trips through standard GFM.
 
+## 0.12.0 — 2026-08-14
+
+### Files open on the desktop you're actually on
+
+- Double-clicking a file in Finder, or `open`ing one from a terminal, used
+  to hand it to whichever window last had focus — and if that window lived
+  on another macOS Space, focusing it dragged your screen there with it.
+  Files arriving from outside the app now open in a new window instead,
+  which lands on the desktop you're currently on. Windows on other desktops
+  stay where you left them.
+- Selecting several files at once still gives you one window, with a tab
+  each — the burst of events is gathered before the window is made.
+- A file that's already open still activates its existing tab wherever that
+  lives, rather than opening a second copy: one file, one buffer, one
+  watcher. When that's the only thing you asked for, its window is focused,
+  desktop switch and all.
+- Opening from inside the app (⌘O, the palette) is unchanged — the window
+  you're working in is on your desktop by definition, and the file lands
+  there as a tab.
+
 ## 0.11.0 — 2026-08-14
 
 Forked from upstream v0.10.1.

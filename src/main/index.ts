@@ -59,8 +59,10 @@ if (!gotLock) {
     return session
   }
 
-  /* Opening a file: the tab already showing it wins, wherever it lives;
-   * otherwise it opens as a tab in the window that was last in focus. */
+  /* Opening a file at launch (command-line arguments, once the session has
+   * restored): the tab already showing it wins, wherever it lives; otherwise
+   * it opens as a tab in the window that was last in focus. Files arriving
+   * while the app is already running go through openFileFromOutside. */
   const openFileSmart = (path: string): void => {
     if (!appReady) {
       pendingOpens.push(path)
@@ -81,6 +83,58 @@ if (!gotLock) {
     } else {
       boot(path)
     }
+  }
+
+  /* Files arriving from outside the app — a Finder double-click, `open`, a
+   * second launch carrying arguments. Nothing else can send these, so the app
+   * was necessarily in the background when they arrived, and the window that
+   * last held focus may be sitting on another macOS Space. Focusing it would
+   * drag the user's screen to that desktop; the batch opens in a NEW window
+   * instead, which macOS places on whatever desktop is active right now.
+   *
+   * A path already open keeps its existing tab — the same file in two windows
+   * would mean two buffers and two watchers over one file. Only when every
+   * requested path is already open does a window get focused, because then
+   * there is nothing new to show and that tab is the whole answer.
+   *
+   * Finder sends one open-file event per selected file, so the batch waits a
+   * beat and lands as tabs of one window rather than a window each. */
+  const externalQueue: string[] = []
+  let externalTimer: NodeJS.Timeout | undefined
+
+  const flushExternalOpens = (): void => {
+    externalTimer = undefined
+    const paths = [...new Set(externalQueue.splice(0))]
+    const fresh: string[] = []
+    let holdingOpen: WindowSession | null = null
+    for (const path of paths) {
+      const holder = [...sessions.values()].find((s) => s.tabWithPath(path) !== null)
+      const tab = holder?.tabWithPath(path)
+      if (!holder || !tab) {
+        fresh.push(path)
+        continue
+      }
+      // Surface it in the window that has it, but don't pull focus there.
+      holder.activate(tab.docId)
+      holdingOpen ??= holder
+    }
+    if (fresh.length === 0) {
+      holdingOpen?.focus()
+      return
+    }
+    const target = boot()
+    for (const path of fresh) void target.openPath(path)
+  }
+
+  const openFileFromOutside = (path: string): void => {
+    if (!appReady) {
+      pendingOpens.push(path)
+      return
+    }
+    externalQueue.push(path)
+    // 50ms: long enough to gather one Finder multi-select, short enough that
+    // a lone file still opens instantly.
+    if (externalTimer === undefined) externalTimer = setTimeout(flushExternalOpens, 50)
   }
 
   /* Drag-out: the tab leaves its window — buffer, watcher, and all — and
@@ -122,7 +176,7 @@ if (!gotLock) {
 
   app.on('open-file', (e, path) => {
     e.preventDefault()
-    openFileSmart(path)
+    openFileFromOutside(path)
   })
 
   app.on('second-instance', (_e, argv, cwd) => {
@@ -134,7 +188,7 @@ if (!gotLock) {
       else boot()
       return
     }
-    for (const path of paths) openFileSmart(path)
+    for (const path of paths) openFileFromOutside(path)
   })
 
   /* ⌘Q quits silently: the session — open windows, their tabs, unsaved
