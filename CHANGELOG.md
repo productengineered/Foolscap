@@ -5,6 +5,22 @@ layout and multi-document features on top of upstream. Upstream's rule that
 the buffer is always plain markdown text is preserved throughout — every
 feature below round-trips through standard GFM.
 
+## 0.13.0 — 2026-08-14
+
+### Files from outside reuse the window on your desktop
+
+- 0.12.0 opened every externally-opened file in a new window, because
+  nothing in Electron answers "which desktop is this window on". Windows
+  piled up. They now land as tabs in a Foolscap window already on the
+  desktop you're looking at, and only make a new window when there isn't
+  one.
+- The desktop is read from the window itself: macOS marks windows on other
+  Spaces as occluded, which Chromium reports as a hidden document. Seeing a
+  window proves it's here — you cannot see a window on another Space —
+  while not seeing one is ambiguous, so the check is only ever trusted in
+  the affirmative. Being wrong costs an extra window, never a desktop
+  switch.
+
 ## 0.12.0 — 2026-08-14
 
 ### Files open on the desktop you're actually on
