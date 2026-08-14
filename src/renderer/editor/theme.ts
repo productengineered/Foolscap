@@ -21,7 +21,7 @@ const editorTheme = EditorView.theme({
     justifyContent: 'center'
   },
   '.cm-content': {
-    maxWidth: 'calc(var(--measure) + var(--gutter-width))',
+    maxWidth: 'calc(var(--measure-app) + var(--gutter-width))',
     width: '100%',
     flexGrow: '0',
     padding: '4rem 0 40vh 0',

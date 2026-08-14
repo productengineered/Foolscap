@@ -59,6 +59,117 @@ body {
   margin-right: 0.45em;
 }
 
+/* ---- Tab strip: lives in the drag region, hidden with a single tab ----
+ * Tabs themselves are no-drag (clickable, draggable-as-tabs); the gaps and
+ * padding around them still move the window. */
+.tabbar {
+  position: absolute;
+  /* Clear of the traffic lights; the right edge stays draggable. */
+  left: var(--tabbar-inset);
+  right: 3rem;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  overflow: hidden;
+}
+
+.tab {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  min-width: 0;
+  max-width: 13rem;
+  padding: 0.15rem 0.3rem 0.15rem 0.6rem;
+  border-radius: var(--radius-ui);
+  color: var(--ink-soft);
+  font-family: var(--font-system);
+  font-size: var(--font-size-ui);
+  font-weight: var(--weight-ui);
+  user-select: none;
+  cursor: default;
+  touch-action: none;
+}
+
+.tab.active {
+  background: var(--paper-sunk);
+  color: var(--ink);
+}
+
+.tab:hover:not(.active) {
+  background: color-mix(in srgb, var(--paper-sunk) 55%, transparent);
+}
+
+.tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-dirty {
+  color: var(--accent);
+  flex: none;
+}
+
+.tab-close {
+  -webkit-app-region: no-drag;
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--ink-ghost);
+  font: inherit;
+  line-height: 1;
+  padding: 0 0.25em;
+  border-radius: var(--radius-inline);
+  cursor: pointer;
+  visibility: hidden;
+}
+
+.tab:hover .tab-close,
+.tab.active .tab-close {
+  visibility: visible;
+}
+
+.tab-close:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink-ghost) 25%, transparent);
+}
+
+.tab-add {
+  -webkit-app-region: no-drag;
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--ink-ghost);
+  font-family: var(--font-system);
+  font-size: calc(var(--font-size-ui) + 3px);
+  line-height: 1;
+  padding: 0.05em 0.35em;
+  border-radius: var(--radius-inline);
+  cursor: pointer;
+}
+
+.tab-add:hover {
+  color: var(--ink);
+  background: var(--paper-sunk);
+}
+
+/* Mid-drag: the tab rides the pointer above its siblings; past the detach
+ * threshold it ghosts — released here, it becomes its own window. */
+.tab-dragging {
+  position: relative;
+  z-index: 30;
+  background: var(--paper-sunk);
+  color: var(--ink);
+}
+
+.tab-detaching {
+  opacity: 0.45;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+}
+
 #app {
   height: 100%;
   padding-top: var(--titlebar-height);
@@ -347,7 +458,7 @@ body {
 }
 
 .preview-doc {
-  max-width: var(--measure);
+  max-width: var(--measure-app);
   margin: 0 auto;
   padding: 3rem 1rem 6rem;
 }
@@ -475,6 +586,9 @@ body {
   border: 1px solid var(--rule);
   padding: 0.35em 0.7em;
   text-align: left;
+  /* Tables lay out fixed with draggable column ratios; long unbroken
+   * content (IDs, URLs) must wrap inside its column, not overflow it. */
+  overflow-wrap: break-word;
 }
 
 .preview-doc th {

@@ -2,7 +2,13 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { clearSession, loadSession, saveSession, type SessionEntry } from './session-store'
+import {
+  clearSession,
+  loadSession,
+  saveSession,
+  type SessionEntry,
+  type WindowEntry
+} from './session-store'
 
 describe('session store', () => {
   let dir: string
@@ -23,9 +29,19 @@ describe('session store', () => {
     { path: null, dirty: true, content: 'untitled scratch survives quit' }
   ]
 
-  it('round-trips clean files, dirty buffers, and untitled drafts', async () => {
-    await saveSession(file, entries)
-    expect(await loadSession(file)).toEqual(entries)
+  const windows: WindowEntry[] = [
+    { tabs: [entries[0]!, entries[1]!], active: 1 },
+    { tabs: [entries[2]!], active: 0 }
+  ]
+
+  it('round-trips windows of tabs — clean files, dirty buffers, untitled drafts', async () => {
+    await saveSession(file, windows)
+    expect(await loadSession(file)).toEqual(windows)
+  })
+
+  it('migrates v1 sessions: each entry becomes its own window', async () => {
+    await writeFile(file, JSON.stringify({ version: 1, entries }))
+    expect(await loadSession(file)).toEqual(entries.map((e) => ({ tabs: [e], active: 0 })))
   })
 
   it('missing file loads as null', async () => {
@@ -35,16 +51,23 @@ describe('session store', () => {
   it('garbage and wrong versions load as null', async () => {
     await writeFile(file, 'not json at all')
     expect(await loadSession(file)).toBeNull()
-    await writeFile(file, JSON.stringify({ version: 99, entries }))
+    await writeFile(file, JSON.stringify({ version: 99, windows }))
     expect(await loadSession(file)).toBeNull()
   })
 
-  it('malformed entries are dropped, not fatal', async () => {
+  it('malformed tabs and windows are dropped, not fatal', async () => {
     await writeFile(
       file,
-      JSON.stringify({ version: 1, entries: [entries[0], { nonsense: true }, 42] })
+      JSON.stringify({
+        version: 2,
+        windows: [
+          { tabs: [entries[0], { nonsense: true }, 42], active: 0 },
+          { not: 'a window' },
+          { tabs: [], active: 0 }
+        ]
+      })
     )
-    expect(await loadSession(file)).toEqual([entries[0]])
+    expect(await loadSession(file)).toEqual([{ tabs: [entries[0]], active: 0 }])
   })
 
   it('an empty session loads as null and clear removes the file', async () => {

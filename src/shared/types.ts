@@ -2,11 +2,14 @@
  * channel names and payload shapes exist in exactly one place. */
 
 /* 'open' is a user-initiated document arrival (open, restore); 'reload' is
- * the same document refreshed from disk (watcher echo, conflict Reload).
+ * the same document refreshed from disk (watcher echo, conflict Reload);
+ * 'transfer' is a tab dragged into this window, buffer carried over.
  * Only 'open' may change the editor/preview mode. */
-export type LoadReason = 'open' | 'reload'
+export type LoadReason = 'open' | 'reload' | 'transfer'
 
 export interface DocPayload {
+  /* Which tab this document belongs to — main-assigned, app-unique. */
+  docId: number
   path: string | null
   /* Directory of the document, main-computed — the renderer has no path
    * module. Used to resolve relative image paths. */
@@ -18,6 +21,29 @@ export interface DocPayload {
   reason: LoadReason
 }
 
+/* What a new, untitled document opens as: a heading ready to be titled,
+ * cursor after the mark. Deliberately the pristine state, not an edit — an
+ * untouched new tab stays clean (no save prompt) and reusable for opening
+ * files into. Main creates tabs with it; the renderer places the cursor. */
+export const NEW_DOC_TEMPLATE = '# \n\n'
+export const NEW_DOC_CURSOR = 2
+
+/* One window's tab strip, as main sees it — main owns tab identity, order,
+ * and activation; the renderer renders the bar and sends intents back. */
+export interface TabInfo {
+  docId: number
+  /* Display name: file basename, or Untitled. */
+  name: string
+  path: string | null
+  dirty: boolean
+}
+
+export interface TabsState {
+  tabs: TabInfo[]
+  /* docId of the active tab. */
+  active: number
+}
+
 export type ConflictChoice = 'reload' | 'keep'
 
 /* File types Foolscap opens via drag-and-drop. One definition for both the
@@ -26,6 +52,7 @@ export const DROPPABLE_FILE = /\.(md|markdown|mdx|txt)$/i
 
 /* Sent after a successful save — Save As changes both. */
 export interface SavedPayload {
+  docId: number
   path: string | null
   dir: string | null
 }
@@ -72,6 +99,8 @@ export interface UpdateCheckResult {
 /* Renderer-initiated commands (command palette) the main process executes. */
 export type AppCommand =
   | 'window-new'
+  | 'tab-new'
+  | 'tab-close'
   | 'help-window'
   | 'file-open'
   | 'file-save'
@@ -91,24 +120,30 @@ export const IPC = {
   pasteImage: 'image:paste',
   openDropped: 'file:open-dropped',
   loadCustomTheme: 'theme:load-custom',
+  tabActivate: 'tabs:activate',
+  tabClose: 'tabs:close',
+  tabReorder: 'tabs:reorder',
+  tabDetach: 'tabs:detach',
   // main → renderer
   command: 'menu:command',
   load: 'doc:load',
   saved: 'doc:saved',
   requestContent: 'doc:request-content',
   conflict: 'doc:conflict',
+  tabsState: 'tabs:state',
   updateReady: 'app:update-ready',
   updateCheck: 'app:update-check',
   updatedTo: 'app:updated-to'
 } as const
 
 /* The contextBridge surface. Implemented in src/preload/index.ts, consumed as
- * `window.foolscap` in the renderer. */
+ * `window.foolscap` in the renderer. Document channels carry the docId of
+ * the tab they concern; tab intents go to the sender window's session. */
 export interface FoolscapApi {
   readonly platform: string
-  setDirty(dirty: boolean): void
-  sendContent(content: string): void
-  resolveConflict(choice: ConflictChoice): void
+  setDirty(docId: number, dirty: boolean): void
+  sendContent(docId: number, content: string): void
+  resolveConflict(docId: number, choice: ConflictChoice): void
   openExternal(url: string): void
   exec(command: AppCommand): void
   /* Returns the relative markdown path, or null for an unsaved document. */
@@ -118,11 +153,18 @@ export interface FoolscapApi {
   openDropped(path: string): void
   /* Pick and read a custom theme css file; null if cancelled. */
   loadCustomTheme(): Promise<string | null>
+  /* Tab intents — the renderer's bar clicks and drags. */
+  tabActivate(docId: number): void
+  tabClose(docId: number): void
+  tabReorder(docId: number, toIndex: number): void
+  /* Drag-out: detach the tab into its own window at screen coordinates. */
+  tabDetach(docId: number, screenX: number, screenY: number): void
   onLoad(cb: (doc: DocPayload) => void): void
+  onTabs(cb: (state: TabsState) => void): void
   onCommand(cb: (command: MenuCommand) => void): void
   onSaved(cb: (saved: SavedPayload) => void): void
-  onRequestContent(cb: () => void): void
-  onConflict(cb: () => void): void
+  onRequestContent(cb: (docId: number) => void): void
+  onConflict(cb: (docId: number) => void): void
   onUpdateReady(cb: (update: UpdatePayload) => void): void
   /* First launch after an update installed — the victory-lap toast. */
   onUpdatedTo(cb: (version: string) => void): void
