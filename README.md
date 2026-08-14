@@ -17,14 +17,14 @@ Foolscap is a single beautiful writing surface for markdown files. The buffer is
 
 ## What it does
 
-- Live preview of every markdown construct: headings (Fraunces, real optical sizing), emphasis, lists with hanging indents and real bullets, links (Cmd-click to open), Shiki-highlighted code fences, inline images, blockquotes, rules, clickable task-list checkboxes, and tables with cell navigation, a normalizing formatter, and hover column controls
+- Live preview of every markdown construct: headings (Fraunces, real optical sizing), emphasis, lists with hanging indents and real bullets, links (Cmd-click to open), Shiki-highlighted code fences, inline images, blockquotes, rules, clickable task-list checkboxes, and tables with cell navigation, a normalizing formatter, drag-to-resize columns, and hover column controls
 - Atomic saves — temp file, fsync, rename; a crash can never truncate your manuscript
 - External-change watching: clean buffers reload silently, dirty buffers get a choice
 - Command palette (⌘K), find & replace, outline panel, typewriter and focus modes, word count
 - Seven themes — from the house Ledger and Plate to GitHub, Vercel, and VS Code — plus load-your-own-CSS custom themes ([THEMING.md](THEMING.md))
 - Ten writing faces, five serif and five sans; one font per page, and code keeps [Ioskeley Mono](https://github.com/ahatem/IoskeleyMono)
 - Paste images from the clipboard into a sibling `assets/` folder
-- Multi-window, with full session restore: `⌘Q` quits silently and the next launch sets the desk back up, unsaved drafts included
+- Tabs and windows — drag a tab out and it becomes a window — with full session restore: `⌘Q` quits silently and the next launch sets the desk back up, unsaved drafts included
 - Self-contained HTML export and typeset PDF export with the editor's real fonts
 
 ## Out of scope
