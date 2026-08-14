@@ -170,9 +170,12 @@ function exitPreview(pos?: number): void {
   previewGen++
   previewEntering = false
   document.documentElement.classList.remove('previewing')
+  // No explicit target (⌘E, Escape): land where the reader was scrolled,
+  // measured while the pane still has geometry.
+  const at = pos ?? (preview.visible ? preview.visiblePos() : undefined)
   preview.hide()
-  if (pos !== undefined) {
-    const anchor = Math.min(pos, editor.view.state.doc.length)
+  if (at !== undefined) {
+    const anchor = Math.min(at, editor.view.state.doc.length)
     editor.view.dispatch({
       selection: { anchor },
       effects: EditorView.scrollIntoView(anchor, { y: 'center' })
