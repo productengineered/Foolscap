@@ -13,13 +13,20 @@ export interface SessionEntry {
   content: string | null
 }
 
-interface SessionFile {
-  version: 1
-  entries: SessionEntry[]
+/* One window: its tabs in order and which one was active. */
+export interface WindowEntry {
+  tabs: SessionEntry[]
+  /* Index into tabs; clamped on restore. */
+  active: number
 }
 
-export async function saveSession(file: string, entries: SessionEntry[]): Promise<void> {
-  const data: SessionFile = { version: 1, entries }
+interface SessionFile {
+  version: 2
+  windows: WindowEntry[]
+}
+
+export async function saveSession(file: string, windows: WindowEntry[]): Promise<void> {
+  const data: SessionFile = { version: 2, windows }
   await atomicWriteFile(file, JSON.stringify(data))
 }
 
@@ -33,14 +40,32 @@ function isEntry(value: unknown): value is SessionEntry {
   )
 }
 
-export async function loadSession(file: string): Promise<SessionEntry[] | null> {
+function isWindowEntry(value: unknown): value is WindowEntry {
+  if (typeof value !== 'object' || value === null) return false
+  const w = value as Record<string, unknown>
+  return Array.isArray(w['tabs']) && typeof w['active'] === 'number'
+}
+
+export async function loadSession(file: string): Promise<WindowEntry[] | null> {
   try {
     const parsed: unknown = JSON.parse(await readFile(file, 'utf8'))
     if (typeof parsed !== 'object' || parsed === null) return null
-    const data = parsed as Partial<SessionFile>
-    if (data.version !== 1 || !Array.isArray(data.entries)) return null
-    const entries = data.entries.filter(isEntry)
-    return entries.length > 0 ? entries : null
+    const data = parsed as { version?: unknown; windows?: unknown; entries?: unknown }
+    let windows: WindowEntry[] = []
+    if (data.version === 2 && Array.isArray(data.windows)) {
+      windows = (data.windows as unknown[])
+        .filter(isWindowEntry)
+        .map((w) => ({ tabs: w.tabs.filter(isEntry), active: w.active }))
+    } else if (data.version === 1 && Array.isArray(data.entries)) {
+      // Pre-tabs sessions: each entry was its own window.
+      windows = (data.entries as unknown[])
+        .filter(isEntry)
+        .map((entry) => ({ tabs: [entry], active: 0 }))
+    } else {
+      return null
+    }
+    windows = windows.filter((w) => w.tabs.length > 0)
+    return windows.length > 0 ? windows : null
   } catch {
     return null
   }

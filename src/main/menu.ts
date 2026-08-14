@@ -1,11 +1,13 @@
 import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import { IPC, type MenuCommand } from '../shared/types'
-import type { DocumentSession } from './session'
+import type { WindowSession } from './session'
 
 export interface MenuActions {
-  /* Session of the focused window — every document menu item targets it. */
-  focused(): DocumentSession | null
+  /* Session of the focused window — every document menu item targets its
+   * active tab. */
+  focused(): WindowSession | null
   newWindow(): void
+  newTab(): void
   open(): void
   help(): void
   /* Persist every session, then hand the process to the updater. */
@@ -16,8 +18,8 @@ function sendCommand(command: MenuCommand): void {
   BrowserWindow.getFocusedWindow()?.webContents.send(IPC.command, command)
 }
 
-/* Cmd+N is a window, per macOS document-app convention (⌘T lands there
- * too — native tabs fought the frameless titlebar and were retired).
+/* ⌘T is a tab, ⌘N a window — macOS document-app convention, with our own
+ * tab strip in the drag region (native tabs fought the frameless titlebar).
  * Recent files: macOS gets the native recentDocuments role, fed by
  * app.addRecentDocument() in the session. A file-backed list for Windows and
  * Linux belongs with their custom window chrome, which isn't built yet. */
@@ -25,6 +27,11 @@ export function installMenu(actions: MenuActions): void {
   const isMac = process.platform === 'darwin'
 
   const fileItems: MenuItemConstructorOptions[] = [
+    {
+      label: 'New Tab',
+      accelerator: 'CmdOrCtrl+T',
+      click: () => actions.newTab()
+    },
     {
       label: 'New Window',
       accelerator: 'CmdOrCtrl+N',
@@ -47,28 +54,37 @@ export function installMenu(actions: MenuActions): void {
     {
       label: 'Save',
       accelerator: 'CmdOrCtrl+S',
-      click: () => void actions.focused()?.save()
+      click: () => void actions.focused()?.activeTab?.save()
     },
     {
       label: 'Save As…',
       accelerator: 'Shift+CmdOrCtrl+S',
-      click: () => void actions.focused()?.save(true)
+      click: () => void actions.focused()?.activeTab?.save(true)
     },
     { type: 'separator' },
     {
       label: 'Export',
       submenu: [
-        { label: 'As HTML…', click: () => void actions.focused()?.exportHtml() },
-        { label: 'As PDF…', click: () => void actions.focused()?.exportPdf() }
+        { label: 'As HTML…', click: () => void actions.focused()?.activeTab?.exportHtml() },
+        { label: 'As PDF…', click: () => void actions.focused()?.activeTab?.exportPdf() }
       ]
     },
     {
       label: 'Print…',
       accelerator: 'CmdOrCtrl+P',
-      click: () => void actions.focused()?.printDoc()
+      click: () => void actions.focused()?.activeTab?.printDoc()
     },
     { type: 'separator' },
-    isMac ? { role: 'close' } : { role: 'quit' }
+    {
+      label: 'Close Tab',
+      accelerator: 'CmdOrCtrl+W',
+      click: () => actions.focused()?.closeActiveTab()
+    },
+    ...(isMac
+      ? ([
+          { label: 'Close Window', accelerator: 'Shift+CmdOrCtrl+W', role: 'close' }
+        ] as MenuItemConstructorOptions[])
+      : ([{ role: 'quit' }] as MenuItemConstructorOptions[]))
   ]
 
   const appMenu: MenuItemConstructorOptions = {

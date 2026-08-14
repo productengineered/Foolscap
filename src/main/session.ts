@@ -3,16 +3,18 @@ import type { FSWatcher } from 'chokidar'
 import { basename, dirname, join } from 'node:path'
 import {
   IPC,
+  NEW_DOC_TEMPLATE,
   type ConflictChoice,
   type DocPayload,
   type LoadReason,
-  type SavedPayload
+  type SavedPayload,
+  type TabsState
 } from '../shared/types'
 import { renderExportHtml } from './export/html'
 import { printDocument, renderPdf } from './export/pdf'
 import { atomicWriteFile, readTextFile, timestampName, watchFile } from './files'
 import { acquireAccess, ensureFolderAccess, rememberBookmark } from './scoped'
-import type { SessionEntry } from './session-store'
+import type { SessionEntry, WindowEntry } from './session-store'
 import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 
@@ -23,11 +25,19 @@ interface SessionHooks {
 
 const MD_FILTERS = [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] }]
 
-/* Owns everything about the current document except the text itself: path,
- * dirty flag, disk watcher, dialogs, and the close/quit guard. The renderer
- * holds the buffer and nothing else; when main needs the text (saving), it
- * asks for it over IPC. */
-export class DocumentSession {
+/* App-unique tab identity; ids never recycle within a run. */
+let nextDocId = 1
+
+/* ---- TabSession: one document ----
+ *
+ * Owns everything about one document except the text itself: path, dirty
+ * flag, disk watcher, save/export dialogs. The renderer holds the buffer
+ * and nothing else; when main needs the text (saving), it asks for it over
+ * IPC by docId. A TabSession outlives its window: dragging a tab out
+ * re-homes the same session — watcher, scoped access, and all — into the
+ * new window. */
+export class TabSession {
+  readonly docId = nextDocId++
   private path: string | null = null
   private dirty = false
   /* Content we last wrote or read ourselves — used to swallow the watcher
@@ -35,59 +45,41 @@ export class DocumentSession {
   private lastSynced: string | null = null
   private pendingDiskContent: string | null = null
   private watcher: FSWatcher | null = null
-  private forceClose = false
-  /* Loads requested before the renderer can receive them queue here. */
-  private ready = false
-  private pendingPath: string | null = null
-  private pendingRestore: SessionEntry | null = null
-  private pendingHelp = false
   /* mas: scoped-resource stopper for the current document; held while open. */
   private stopScopedAccess: (() => void) | null = null
 
-  constructor(
-    private win: BrowserWindow,
-    private hooks: SessionHooks
-  ) {
-    this.updateTitle()
-    win.webContents.once('did-finish-load', () => {
-      this.ready = true
-      if (this.pendingRestore) {
-        const entry = this.pendingRestore
-        this.pendingRestore = null
-        void this.restore(entry)
-      } else if (this.pendingPath) {
-        const path = this.pendingPath
-        this.pendingPath = null
-        void this.openPath(path)
-      }
-      if (this.pendingHelp) {
-        this.pendingHelp = false
-        this.win.webContents.send(IPC.command, 'show-help')
-      }
-    })
-    win.on('close', (e) => {
-      if (this.dirty && !this.forceClose) {
-        e.preventDefault()
-        void this.confirmClose()
-      }
-    })
-    win.on('closed', () => this.unwatch())
+  constructor(private host: WindowSession) {}
+
+  /* Detach hands the session to another window. */
+  rehost(host: WindowSession): void {
+    this.host = host
   }
 
-  /* An untitled, untouched window — reusable for opening a file into. */
+  get isDirty(): boolean {
+    return this.dirty
+  }
+
+  getPath(): string | null {
+    return this.path
+  }
+
+  /* An untitled, untouched tab — reusable for opening a file into. */
   get isEmpty(): boolean {
-    return (
-      this.path === null &&
-      !this.dirty &&
-      this.pendingPath === null &&
-      this.pendingRestore === null
-    )
+    return this.path === null && !this.dirty
   }
 
-  /* ---- quit-time session persistence ---- */
+  name(): string {
+    return this.path ? basename(this.path) : 'Untitled'
+  }
+
+  private get win(): BrowserWindow {
+    return this.host.window
+  }
+
+  /* ---- session persistence ---- */
 
   /* Snapshot for the session store: clean documents record only their path;
-   * dirty ones carry the buffer. Untouched untitled windows record nothing. */
+   * dirty ones carry the buffer. Untouched untitled tabs record nothing. */
   async captureState(): Promise<SessionEntry | null> {
     if (this.isEmpty) return null
     if (!this.dirty) return { path: this.path, dirty: false, content: null }
@@ -95,16 +87,7 @@ export class DocumentSession {
     return { path: this.path, dirty: true, content }
   }
 
-  /* Quit is persisting the session — close without the unsaved prompt. */
-  allowSilentClose(): void {
-    this.forceClose = true
-  }
-
   async restore(entry: SessionEntry): Promise<void> {
-    if (!this.ready) {
-      this.pendingRestore = entry
-      return
-    }
     this.path = entry.path
     let disk: string | null = null
     if (entry.path) {
@@ -123,34 +106,16 @@ export class DocumentSession {
     if (entry.path) app.addRecentDocument(entry.path)
   }
 
-  focus(): void {
-    if (this.win.isMinimized()) this.win.restore()
-    this.win.focus()
-  }
-
-  /* Show the help overlay once the renderer can receive it — help opens in
-   * its own fresh window so it never papers over someone's novella. */
-  showHelpWhenReady(): void {
-    if (this.ready && !this.win.isDestroyed()) {
-      this.win.webContents.send(IPC.command, 'show-help')
-    } else {
-      this.pendingHelp = true
-    }
-  }
-
   setDirty(dirty: boolean): void {
     if (dirty !== this.dirty) {
       this.dirty = dirty
-      this.updateTitle()
+      this.host.onTabChanged()
     }
   }
 
+  /* Opens always land in a fresh or empty tab (WindowSession routes them),
+   * so there is no buffer here worth guarding. */
   async openPath(path: string): Promise<void> {
-    if (!this.ready) {
-      this.pendingPath = path
-      return
-    }
-    if (!(await this.guardUnsaved())) return
     await this.scopeTo(path)
     let content = ''
     try {
@@ -170,16 +135,15 @@ export class DocumentSession {
     app.addRecentDocument(path)
   }
 
-  async openViaDialog(): Promise<void> {
-    const result = await dialog.showOpenDialog(this.win, {
-      properties: ['openFile'],
-      filters: [...MD_FILTERS, { name: 'All Files', extensions: ['*'] }],
-      securityScopedBookmarks: true
-    })
-    const picked = result.filePaths[0]
-    if (result.canceled || !picked) return
-    await rememberBookmark(picked, result.bookmarks?.[0])
-    await this.openPath(picked)
+  /* The blank document a fresh tab opens as. */
+  loadTemplate(): void {
+    this.load(NEW_DOC_TEMPLATE)
+  }
+
+  /* A detached tab arriving in its new window, buffer carried over. */
+  loadTransferred(content: string, dirty: boolean): void {
+    this.dirty = dirty
+    this.load(content, dirty, 'transfer')
   }
 
   /* Save the buffer. Returns true on success, false if the user cancelled a
@@ -225,9 +189,9 @@ export class DocumentSession {
     this.path = target
     this.lastSynced = content
     this.rewatch()
-    this.setDirty(false)
-    this.updateTitle()
-    const saved: SavedPayload = { path: target, dir: dirname(target) }
+    this.dirty = false
+    this.host.onTabChanged()
+    const saved: SavedPayload = { docId: this.docId, path: target, dir: dirname(target) }
     this.win.webContents.send(IPC.saved, saved)
     app.addRecentDocument(target)
     return true
@@ -325,6 +289,31 @@ export class DocumentSession {
     this.pendingDiskContent = null
   }
 
+  /* Returns true when it is safe to discard the buffer. Public: the window
+   * runs this per dirty tab when closing. */
+  async guardUnsaved(): Promise<boolean> {
+    if (!this.dirty) return true
+    const { response } = await dialog.showMessageBox(this.win, {
+      type: 'warning',
+      message: `Do you want to save the changes you made to “${this.name()}”?`,
+      detail: 'Your changes will be lost if you don’t save them.',
+      buttons: ['Save', 'Don’t Save', 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true
+    })
+    if (response === 2) return false
+    if (response === 1) return true
+    return this.save()
+  }
+
+  /* Watcher and scoped access released — the tab is gone for good. */
+  dispose(): void {
+    this.unwatch()
+    this.stopScopedAccess?.()
+    this.stopScopedAccess = null
+  }
+
   /* ---- internals ---- */
 
   /* Swap long-lived scoped access to follow the open document (mas no-op
@@ -338,8 +327,9 @@ export class DocumentSession {
     if (this.win.isDestroyed()) return
     this.dirty = dirty
     this.pendingDiskContent = null
-    this.updateTitle()
+    this.host.onTabChanged()
     const payload: DocPayload = {
+      docId: this.docId,
       path: this.path,
       dir: this.path ? dirname(this.path) : null,
       content,
@@ -349,53 +339,11 @@ export class DocumentSession {
     this.win.webContents.send(IPC.load, payload)
   }
 
-  private updateTitle(): void {
-    const name = this.path ? basename(this.path) : 'Untitled'
-    if (process.platform === 'darwin') {
-      // hiddenInset shows no title text, but the close button gets the
-      // document-edited dot and Mission Control shows the name.
-      this.win.setTitle(name)
-      this.win.setRepresentedFilename(this.path ?? '')
-      this.win.setDocumentEdited(this.dirty)
-    } else {
-      this.win.setTitle(`${this.dirty ? '• ' : ''}${name} — Foolscap`)
-    }
-  }
-
-  /* Returns true when it is safe to discard the buffer. */
-  private async guardUnsaved(): Promise<boolean> {
-    if (!this.dirty) return true
-    const name = this.path ? basename(this.path) : 'Untitled'
-    const { response } = await dialog.showMessageBox(this.win, {
-      type: 'warning',
-      message: `Do you want to save the changes you made to “${name}”?`,
-      detail: 'Your changes will be lost if you don’t save them.',
-      buttons: ['Save', 'Don’t Save', 'Cancel'],
-      defaultId: 0,
-      cancelId: 2,
-      noLink: true
-    })
-    if (response === 2) return false
-    if (response === 1) return true
-    return this.save()
-  }
-
-  private async confirmClose(): Promise<void> {
-    const wasQuitting = this.hooks.isQuitting()
-    if (await this.guardUnsaved()) {
-      this.forceClose = true
-      this.win.close()
-      if (wasQuitting) app.quit()
-    } else {
-      this.hooks.onQuitCancelled()
-    }
-  }
-
   /* A promise that never settles would hang its caller — quit most fatally,
    * where one wedged window would also cost every other window's drafts. A
    * crashed or destroyed renderer rejects; timeoutMs (the quit path) bounds
    * a merely hung one. */
-  private getRendererContent(timeoutMs?: number): Promise<string> {
+  getRendererContent(timeoutMs?: number): Promise<string> {
     return new Promise((resolve, reject) => {
       const wc = this.win.webContents
       let timer: NodeJS.Timeout | undefined
@@ -405,10 +353,10 @@ export class DocumentSession {
         wc.off('destroyed', onGone)
         clearTimeout(timer)
       }
-      // Filter by sender: with several windows open, another window's reply
-      // must never satisfy this request.
-      const handler = (e: Electron.IpcMainEvent, content: string): void => {
-        if (e.sender.id === wc.id) {
+      // Filter by sender AND docId: with several windows and tabs open,
+      // another document's reply must never satisfy this request.
+      const handler = (e: Electron.IpcMainEvent, docId: number, content: string): void => {
+        if (e.sender.id === wc.id && docId === this.docId) {
           cleanup()
           resolve(content)
         }
@@ -427,7 +375,7 @@ export class DocumentSession {
         }, timeoutMs)
       }
       try {
-        wc.send(IPC.requestContent)
+        wc.send(IPC.requestContent, this.docId)
       } catch (err) {
         cleanup()
         reject(err instanceof Error ? err : new Error(String(err)))
@@ -462,9 +410,340 @@ export class DocumentSession {
     this.lastSynced = disk
     if (this.dirty) {
       this.pendingDiskContent = disk
-      this.win.webContents.send(IPC.conflict)
+      this.win.webContents.send(IPC.conflict, this.docId)
     } else {
       this.load(disk, false, 'reload')
     }
+  }
+}
+
+/* ---- WindowSession: one window's tab strip ----
+ *
+ * Owns tab identity, order, and activation; pushes the strip to the
+ * renderer as tabs:state and applies the intents that come back. The close
+ * guard walks every dirty tab. */
+export class WindowSession {
+  private tabs: TabSession[] = []
+  private activeIndex = 0
+  private forceClose = false
+  /* Loads requested before the renderer can receive them queue here. */
+  private ready = false
+  private pendingPaths: string[] = []
+  private pendingRestore: WindowEntry | null = null
+  private pendingHelp = false
+  private pendingAdopt: { tab: TabSession; content: string; dirty: boolean } | null = null
+
+  constructor(
+    readonly window: BrowserWindow,
+    private hooks: SessionHooks
+  ) {
+    this.updateTitle()
+    window.webContents.once('did-finish-load', () => {
+      this.ready = true
+      if (this.pendingRestore) {
+        const entry = this.pendingRestore
+        this.pendingRestore = null
+        void this.restore(entry)
+      }
+      if (this.pendingAdopt) {
+        const adopt = this.pendingAdopt
+        this.pendingAdopt = null
+        this.finishAdopt(adopt.tab, adopt.content, adopt.dirty)
+      }
+      for (const path of this.pendingPaths.splice(0)) void this.openPath(path)
+      // A window that arrived with nothing to show opens an untitled tab.
+      if (this.tabs.length === 0) this.newTab()
+      if (this.pendingHelp) {
+        this.pendingHelp = false
+        this.window.webContents.send(IPC.command, 'show-help')
+      }
+    })
+    window.on('close', (e) => {
+      if (this.forceClose) return
+      if (this.tabs.some((t) => t.isDirty)) {
+        e.preventDefault()
+        void this.confirmCloseAll()
+      }
+    })
+    window.on('closed', () => {
+      for (const tab of this.tabs) tab.dispose()
+      this.tabs = []
+    })
+  }
+
+  get activeTab(): TabSession | null {
+    return this.tabs[this.activeIndex] ?? null
+  }
+
+  get tabCount(): number {
+    return this.tabs.length
+  }
+
+  tab(docId: number): TabSession | null {
+    return this.tabs.find((t) => t.docId === docId) ?? null
+  }
+
+  tabWithPath(path: string): TabSession | null {
+    return this.tabs.find((t) => t.getPath() === path) ?? null
+  }
+
+  /* ---- opening ---- */
+
+  newTab(): void {
+    if (!this.ready) return
+    const tab = new TabSession(this)
+    this.tabs.push(tab)
+    this.activeIndex = this.tabs.length - 1
+    tab.loadTemplate()
+    this.broadcast()
+  }
+
+  /* Consecutive opens (a multi-file launch, a burst of drops) must not race
+   * for the same "empty" tab — each open sees the previous one's result. */
+  private opening: Promise<void> = Promise.resolve()
+
+  /* A file arriving in this window: activate it if already open, open into
+   * an untouched untitled active tab, otherwise a fresh tab. */
+  openPath(path: string): Promise<void> {
+    if (!this.ready) {
+      this.pendingPaths.push(path)
+      return Promise.resolve()
+    }
+    const run = this.opening.then(() => this.openPathNow(path))
+    this.opening = run.catch(() => undefined)
+    return run
+  }
+
+  private async openPathNow(path: string): Promise<void> {
+    const existing = this.tabWithPath(path)
+    if (existing) {
+      this.activate(existing.docId)
+      return
+    }
+    const active = this.activeTab
+    let target: TabSession
+    if (active && active.isEmpty) {
+      target = active
+    } else {
+      target = new TabSession(this)
+      this.tabs.push(target)
+      this.activeIndex = this.tabs.length - 1
+    }
+    await target.openPath(path)
+    this.activeIndex = this.tabs.indexOf(target)
+    this.broadcast()
+  }
+
+  async openViaDialog(): Promise<void> {
+    const result = await dialog.showOpenDialog(this.window, {
+      properties: ['openFile'],
+      filters: [...MD_FILTERS, { name: 'All Files', extensions: ['*'] }],
+      securityScopedBookmarks: true
+    })
+    const picked = result.filePaths[0]
+    if (result.canceled || !picked) return
+    await rememberBookmark(picked, result.bookmarks?.[0])
+    await this.openPath(picked)
+  }
+
+  async restore(entry: WindowEntry): Promise<void> {
+    if (!this.ready) {
+      this.pendingRestore = entry
+      return
+    }
+    for (const tabEntry of entry.tabs) {
+      const tab = new TabSession(this)
+      this.tabs.push(tab)
+      await tab.restore(tabEntry)
+    }
+    this.activeIndex = Math.max(0, Math.min(entry.active, this.tabs.length - 1))
+    this.broadcast()
+  }
+
+  /* ---- tab intents from the renderer ---- */
+
+  activate(docId: number): void {
+    const index = this.tabs.findIndex((t) => t.docId === docId)
+    if (index === -1 || index === this.activeIndex) return
+    this.activeIndex = index
+    this.broadcast()
+  }
+
+  /* Close one tab, guarding its unsaved changes; the last tab closes the
+   * window (whose own guard then runs). */
+  async closeTab(docId: number): Promise<void> {
+    const tab = this.tab(docId)
+    if (!tab) return
+    if (this.tabs.length === 1) {
+      this.window.close()
+      return
+    }
+    if (tab.isDirty) {
+      this.activate(docId) // the user should see what they're deciding about
+      if (!(await tab.guardUnsaved())) return
+    }
+    this.removeTab(tab)
+    tab.dispose()
+  }
+
+  closeActiveTab(): void {
+    const active = this.activeTab
+    if (active) void this.closeTab(active.docId)
+  }
+
+  reorder(docId: number, toIndex: number): void {
+    const from = this.tabs.findIndex((t) => t.docId === docId)
+    if (from === -1) return
+    const activeId = this.activeTab?.docId
+    const clamped = Math.max(0, Math.min(toIndex, this.tabs.length - 1))
+    const moved = this.tabs.splice(from, 1)
+    this.tabs.splice(clamped, 0, ...moved)
+    this.activeIndex = Math.max(
+      0,
+      this.tabs.findIndex((t) => t.docId === activeId)
+    )
+    this.broadcast()
+  }
+
+  /* Drag-out, source side: pull the buffer (edits travel with the tab),
+   * remove the tab from this strip, and hand the session over. Null when
+   * the tab can't leave (sole tab, or a wedged renderer). */
+  async extractTab(docId: number): Promise<{ tab: TabSession; content: string; dirty: boolean } | null> {
+    const tab = this.tab(docId)
+    if (!tab || this.tabs.length <= 1) return null
+    let content: string
+    try {
+      content = await tab.getRendererContent(2000)
+    } catch {
+      return null
+    }
+    const dirty = tab.isDirty
+    this.removeTab(tab)
+    return { tab, content, dirty }
+  }
+
+  /* Drag-out, target side: the same TabSession, re-homed. */
+  adoptTab(tab: TabSession, content: string, dirty: boolean): void {
+    if (!this.ready) {
+      this.pendingAdopt = { tab, content, dirty }
+      return
+    }
+    this.finishAdopt(tab, content, dirty)
+  }
+
+  private finishAdopt(tab: TabSession, content: string, dirty: boolean): void {
+    tab.rehost(this)
+    this.tabs.push(tab)
+    this.activeIndex = this.tabs.length - 1
+    tab.loadTransferred(content, dirty)
+    this.broadcast()
+  }
+
+  private removeTab(tab: TabSession): void {
+    const index = this.tabs.indexOf(tab)
+    if (index === -1) return
+    this.tabs.splice(index, 1)
+    if (this.activeIndex >= this.tabs.length) this.activeIndex = this.tabs.length - 1
+    else if (index < this.activeIndex) this.activeIndex--
+    this.broadcast()
+  }
+
+  /* ---- window-level plumbing ---- */
+
+  /* Tabs report every path/dirty change here; the strip and title follow. */
+  onTabChanged(): void {
+    this.broadcast()
+  }
+
+  private broadcast(): void {
+    if (this.window.isDestroyed() || this.tabs.length === 0) {
+      this.updateTitle()
+      return
+    }
+    const state: TabsState = {
+      tabs: this.tabs.map((t) => ({
+        docId: t.docId,
+        name: t.name(),
+        path: t.getPath(),
+        dirty: t.isDirty
+      })),
+      active: this.activeTab?.docId ?? -1
+    }
+    this.window.webContents.send(IPC.tabsState, state)
+    this.updateTitle()
+  }
+
+  private updateTitle(): void {
+    if (this.window.isDestroyed()) return
+    const active = this.activeTab
+    const name = active?.name() ?? 'Untitled'
+    const dirty = active?.isDirty ?? false
+    if (process.platform === 'darwin') {
+      // hiddenInset shows no title text, but the close button gets the
+      // document-edited dot and Mission Control shows the name.
+      this.window.setTitle(name)
+      this.window.setRepresentedFilename(active?.getPath() ?? '')
+      this.window.setDocumentEdited(dirty)
+    } else {
+      this.window.setTitle(`${dirty ? '• ' : ''}${name} — Foolscap`)
+    }
+  }
+
+  /* ---- quit-time persistence ---- */
+
+  async captureState(): Promise<WindowEntry | null> {
+    const caps: (SessionEntry | null)[] = []
+    for (const tab of this.tabs) {
+      try {
+        caps.push(await tab.captureState())
+      } catch {
+        caps.push(null) // a wedged tab must not block quitting
+      }
+    }
+    const entries = caps.filter((c): c is SessionEntry => c !== null)
+    if (entries.length === 0) return null
+    let active = 0
+    for (let i = 0, seen = 0; i < caps.length; i++) {
+      if (caps[i]) {
+        if (i === this.activeIndex) active = seen
+        seen++
+      }
+    }
+    return { tabs: entries, active }
+  }
+
+  /* Quit is persisting the session — close without the unsaved prompt. */
+  allowSilentClose(): void {
+    this.forceClose = true
+  }
+
+  focus(): void {
+    if (this.window.isMinimized()) this.window.restore()
+    this.window.focus()
+  }
+
+  /* Show the help overlay once the renderer can receive it. */
+  showHelpWhenReady(): void {
+    if (this.ready && !this.window.isDestroyed()) {
+      this.window.webContents.send(IPC.command, 'show-help')
+    } else {
+      this.pendingHelp = true
+    }
+  }
+
+  /* Walk every dirty tab; any Cancel aborts the whole close. */
+  private async confirmCloseAll(): Promise<void> {
+    const wasQuitting = this.hooks.isQuitting()
+    for (const tab of [...this.tabs]) {
+      if (!tab.isDirty) continue
+      this.activate(tab.docId)
+      if (!(await tab.guardUnsaved())) {
+        this.hooks.onQuitCancelled()
+        return
+      }
+    }
+    this.forceClose = true
+    this.window.close()
+    if (wasQuitting) app.quit()
   }
 }

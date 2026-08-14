@@ -13,6 +13,12 @@ export function initTitlebar(): void {
   strip.append(title)
 }
 
+/* With two or more tabs the strip belongs to the tab bar; the centered
+ * title text stands down. */
+export function setTitlebarVisible(visible: boolean): void {
+  if (title) title.hidden = !visible
+}
+
 export function setTitlebar(path: string | null, dirty: boolean): void {
   if (!title) return
   const name = path ? (path.split(/[\\/]/).pop() ?? 'Untitled') : 'Untitled'

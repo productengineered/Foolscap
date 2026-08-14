@@ -62,6 +62,8 @@
 
   /* ---- Chrome ---- */
   --titlebar-height: 32px;
+  /* Tab strip's left edge: clear of the macOS traffic lights. */
+  --tabbar-inset: 86px;
   --cursor-width: 2px;
   --radius-ui: 6px;
   --radius-inline: 4px;

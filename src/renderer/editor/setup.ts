@@ -22,6 +22,9 @@ export interface EditorHandle {
    * state so undo history cannot cross file boundaries. Keeps the cursor
    * offset, clamped, so a silent external reload doesn't teleport the caret. */
   replace(content: string, docDir: string | null): void
+  /* A standalone state for a background tab — same extensions, own undo
+   * history. Swapped in with view.setState when its tab activates. */
+  makeState(content: string, anchor: number, docDir: string | null): EditorState
   /* Save As moves the document without reloading it; relative image paths
    * must re-anchor without destroying undo history. */
   setDocDir(docDir: string | null): void
@@ -80,6 +83,7 @@ export function createEditor(parent: HTMLElement, hooks: EditorHooks): EditorHan
       const anchor = view.state.selection.main.head
       view.setState(makeState(content, anchor, dir))
     },
+    makeState: (content, anchor, dir) => makeState(content, anchor, dir),
     setDocDir: (dir) => {
       view.dispatch({ effects: docDir.reconfigure(docDirFacet.of(dir)) })
     }
