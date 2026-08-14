@@ -5,8 +5,8 @@ import { join } from 'node:path'
 import { pathsFromArgv, type ArgvFilter } from './cli'
 import { registerIpc } from './ipc'
 import { installMenu, type MenuActions } from './menu'
-import { DocumentSession } from './session'
-import { clearSession, loadSession, saveSession, type SessionEntry } from './session-store'
+import { WindowSession } from './session'
+import { clearSession, loadSession, saveSession, type WindowEntry } from './session-store'
 import { IPC } from '../shared/types'
 import { installAndRestart, startAutoUpdater } from './updater'
 import { createWindow, installContentsGuards } from './window'
@@ -20,12 +20,15 @@ if (!gotLock) {
   // no-ops and the file never opens).
   setTimeout(() => app.quit(), 200)
 } else {
-  /* One DocumentSession per window, keyed by webContents id. */
-  const sessions = new Map<number, DocumentSession>()
+  /* One WindowSession per window, keyed by webContents id. */
+  const sessions = new Map<number, WindowSession>()
   let quitting = false
   let appReady = false
   /* CLI/open-file paths arriving before ready queue here. */
   const pendingOpens: string[] = []
+  /* Files open in the window that last held focus — even when the app is
+   * in the background and getFocusedWindow() returns null. */
+  let lastFocusedWcId = -1
 
   const hooks = {
     isQuitting: () => quitting,
@@ -34,34 +37,45 @@ if (!gotLock) {
     }
   }
 
-  const focusedSession = (): DocumentSession | null => {
+  const focusedSession = (): WindowSession | null => {
     const win = BrowserWindow.getFocusedWindow()
-    return win ? (sessions.get(win.webContents.id) ?? null) : null
+    if (win) return sessions.get(win.webContents.id) ?? null
+    return sessions.get(lastFocusedWcId) ?? null
   }
 
-  const boot = (initialPath?: string): DocumentSession => {
+  const boot = (initialPath?: string): WindowSession => {
     const win = createWindow()
-    const session = new DocumentSession(win, hooks)
+    const session = new WindowSession(win, hooks)
     // Capture the id now: by the time 'closed' fires the window is
     // destroyed and touching win.webContents throws.
     const wcId = win.webContents.id
     sessions.set(wcId, session)
+    lastFocusedWcId = wcId
+    win.on('focus', () => {
+      lastFocusedWcId = wcId
+    })
     win.on('closed', () => sessions.delete(wcId))
     if (initialPath) void session.openPath(initialPath)
     return session
   }
 
-  /* Opening a file targets an empty focused window; otherwise a new one.
-   * Standard macOS document-app behavior. When no window holds OS focus
-   * (e.g. the app is in the background), any empty window qualifies. */
+  /* Opening a file: the tab already showing it wins, wherever it lives;
+   * otherwise it opens as a tab in the window that was last in focus. */
   const openFileSmart = (path: string): void => {
     if (!appReady) {
       pendingOpens.push(path)
       return
     }
-    const focused = focusedSession()
-    const target = focused ?? [...sessions.values()].find((s) => s.isEmpty) ?? null
-    if (target?.isEmpty) {
+    for (const session of sessions.values()) {
+      const tab = session.tabWithPath(path)
+      if (tab) {
+        session.activate(tab.docId)
+        session.focus()
+        return
+      }
+    }
+    const target = focusedSession() ?? [...sessions.values()][0] ?? null
+    if (target) {
       void target.openPath(path)
       target.focus()
     } else {
@@ -69,9 +83,25 @@ if (!gotLock) {
     }
   }
 
+  /* Drag-out: the tab leaves its window — buffer, watcher, and all — and
+   * lands as the sole tab of a new window under the cursor. */
+  const detachTab = async (source: WindowSession, docId: number, x: number, y: number): Promise<void> => {
+    const extracted = await source.extractTab(docId)
+    if (!extracted) return
+    const target = boot()
+    // Near the drop point, clamped by the OS to something visible.
+    target.window.setPosition(Math.round(x - 80), Math.round(y - 20))
+    target.adoptTab(extracted.tab, extracted.content, extracted.dirty)
+  }
+
   const actions: MenuActions = {
     focused: focusedSession,
     newWindow: () => void boot(),
+    newTab: () => {
+      const session = focusedSession()
+      if (session) session.newTab()
+      else boot()
+    },
     open: () => {
       void (focusedSession() ?? boot()).openViaDialog()
     },
@@ -107,24 +137,24 @@ if (!gotLock) {
     for (const path of paths) openFileSmart(path)
   })
 
-  /* ⌘Q quits silently: the session — open documents, unsaved edits,
-   * untitled drafts — persists to userData and restores on the next bare
-   * launch. Only quit behaves this way; closing a window still prompts. */
+  /* ⌘Q quits silently: the session — open windows, their tabs, unsaved
+   * edits, untitled drafts — persists to userData and restores on the next
+   * bare launch. Only quit behaves this way; closing still prompts. */
   const sessionFile = (): string => join(app.getPath('userData'), 'session.json')
   let persistedQuit = false
 
   const persistAndQuit = async (installUpdate = false): Promise<void> => {
-    const entries: SessionEntry[] = []
+    const windows: WindowEntry[] = []
     for (const session of sessions.values()) {
       try {
         const entry = await session.captureState()
-        if (entry) entries.push(entry)
+        if (entry) windows.push(entry)
       } catch {
         // a wedged renderer must not block quitting; that window is lost
       }
     }
     try {
-      await saveSession(sessionFile(), entries)
+      await saveSession(sessionFile(), windows)
     } catch {
       // losing the session is bad, refusing to quit is worse
     }
@@ -147,7 +177,7 @@ if (!gotLock) {
       pendingOpens.push(path)
     }
     installContentsGuards()
-    registerIpc((wcId) => sessions.get(wcId) ?? null, actions)
+    registerIpc((wcId) => sessions.get(wcId) ?? null, actions, detachTab)
     installMenu(actions)
 
     appReady = true
@@ -167,21 +197,31 @@ if (!gotLock) {
         return false
       }
     }
-    const restorable = (restored ?? []).filter(
-      (entry) => entry.dirty || (entry.path !== null && fileExists(entry.path))
-    )
+    const restorable = (restored ?? [])
+      .map((win) => ({
+        ...win,
+        tabs: win.tabs.filter(
+          (entry) => entry.dirty || (entry.path !== null && fileExists(entry.path))
+        )
+      }))
+      .filter((win) => win.tabs.length > 0)
     if (restored) await clearSession(sessionFile())
-    // Dedup against the argument paths: a clean persisted entry for a file
-    // that's also an argument yields to the argument's window; a dirty entry
-    // wins and the argument is dropped — the draft outranks the disk copy.
+    // Dedup against the argument paths: a clean persisted tab for a file
+    // that's also an argument yields to the argument; a dirty tab wins and
+    // the argument is dropped — the draft outranks the disk copy.
     const argPaths = new Set(pendingOpens)
-    const entries = restorable.filter(
-      (entry) => entry.dirty || entry.path === null || !argPaths.has(entry.path)
-    )
-    const restoredPaths = new Set(entries.map((entry) => entry.path))
-    for (const entry of entries) void boot().restore(entry)
+    const windows = restorable
+      .map((win) => ({
+        ...win,
+        tabs: win.tabs.filter(
+          (entry) => entry.dirty || entry.path === null || !argPaths.has(entry.path)
+        )
+      }))
+      .filter((win) => win.tabs.length > 0)
+    const restoredPaths = new Set(windows.flatMap((win) => win.tabs.map((entry) => entry.path)))
+    for (const win of windows) void boot().restore(win)
     for (const path of pendingOpens) {
-      if (!restoredPaths.has(path)) boot(path)
+      if (!restoredPaths.has(path)) openFileSmart(path)
     }
     pendingOpens.length = 0
     if (sessions.size === 0) boot()

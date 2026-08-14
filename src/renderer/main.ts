@@ -31,9 +31,10 @@ import './styles/themes/vercel.css'
 import './styles/themes/vscode.css'
 import './styles/base.css'
 import { openSearchPanel } from '@codemirror/search'
-import type { StateCommand } from '@codemirror/state'
+import type { EditorState, StateCommand } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { renderMarkdown } from '../shared/markdown'
+import { NEW_DOC_CURSOR, NEW_DOC_TEMPLATE, type TabsState } from '../shared/types'
 import {
   insertLink,
   toggleBold,
@@ -63,7 +64,8 @@ import { Palette, type PaletteCommand } from './ui/palette'
 import { Preview } from './ui/preview'
 import { Settings } from './ui/settings'
 import { TableControls } from './ui/table-controls'
-import { initTitlebar, setTitlebar } from './ui/titlebar'
+import { TabBar } from './ui/tabs'
+import { initTitlebar, setTitlebar, setTitlebarVisible } from './ui/titlebar'
 
 restoreTheme()
 restoreFont()
@@ -75,25 +77,40 @@ if (!(app instanceof HTMLElement)) {
   throw new Error('renderer: #app mount point missing from index.html')
 }
 
-/* Dirty is a changed-since-load flag, not a diff: set on the first edit,
- * cleared when main confirms a save or pushes a fresh document. */
-let dirty = false
-let currentPath: string | null = null
-let currentDir: string | null = null
+/* ---- The document registry: one buffer per tab ----
+ *
+ * Main owns tab identity and order; this window holds an EditorState per
+ * docId and shows exactly one at a time in the single EditorView. Dirty is
+ * a changed-since-load flag, not a diff: set on the first edit, cleared
+ * when main confirms a save or pushes a fresh document.
+ * editedSinceContentSent guards the save race: a save snapshots the buffer
+ * over IPC and writes async; keystrokes landing in that window are in the
+ * buffer but not in the file, and doc:saved must not mark them clean. */
+interface OpenDoc {
+  state: EditorState
+  path: string | null
+  dir: string | null
+  dirty: boolean
+  editedSinceContentSent: boolean
+  conflictPending: boolean
+  scrollTop: number
+}
 
-/* Set on every edit, cleared each time the buffer is handed to main. A save
- * snapshots the buffer over IPC and writes async; keystrokes landing in that
- * window are in the buffer but not in the file, and doc:saved must not mark
- * them clean. */
-let editedSinceContentSent = false
+const docs = new Map<number, OpenDoc>()
+let displayedId: number | null = null
+let tabsState: TabsState | null = null
+
+const displayedDoc = (): OpenDoc | null => (displayedId === null ? null : (docs.get(displayedId) ?? null))
 
 const editor = createEditor(app, {
   onDocChanged: () => {
-    editedSinceContentSent = true
-    if (!dirty) {
-      dirty = true
-      window.foolscap.setDirty(true)
-      setTitlebar(currentPath, true)
+    const doc = displayedDoc()
+    if (!doc || displayedId === null) return
+    doc.editedSinceContentSent = true
+    if (!doc.dirty) {
+      doc.dirty = true
+      // The tab strip and title follow main's re-broadcast.
+      window.foolscap.setDirty(displayedId, true)
     }
   },
   onUpdate: (update) => {
@@ -147,7 +164,7 @@ async function enterPreview(nearPos?: number): Promise<void> {
   try {
     // Render before hiding the editor: while the pipeline works, the user
     // sees their document as text — never blank paper.
-    await preview.show(editor.getContent(), currentDir, at)
+    await preview.show(editor.getContent(), displayedDoc()?.dir ?? null, at)
     if (gen !== previewGen) {
       // The stale show stole focus; hand it back to wherever the user went.
       preview.hide()
@@ -268,6 +285,8 @@ window.foolscap.onCommand((command) => {
 const mod = window.foolscap.platform === 'darwin' ? '⌘' : 'Ctrl+'
 
 const paletteCommands = (): PaletteCommand[] => [
+  { id: 'new-tab', title: 'New Tab', hint: `${mod}T`, run: () => window.foolscap.exec('tab-new') },
+  { id: 'close-tab', title: 'Close Tab', hint: `${mod}W`, run: () => window.foolscap.exec('tab-close') },
   { id: 'new-window', title: 'New Window', hint: `${mod}N`, run: () => window.foolscap.exec('window-new') },
   { id: 'open', title: 'Open…', hint: `${mod}O`, run: () => window.foolscap.exec('file-open') },
   { id: 'save', title: 'Save', hint: `${mod}S`, run: () => window.foolscap.exec('file-save') },
@@ -359,10 +378,19 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault()
     outline.toggle()
   } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 't') {
-    // Old tab reflex — native tabs are gone (they fought the frameless
-    // titlebar); a fresh window is what the finger meant.
+    // Redundant with the menu accelerator — whichever fires first wins.
     e.preventDefault()
-    window.foolscap.exec('window-new')
+    window.foolscap.exec('tab-new')
+  } else if (e.ctrlKey && !e.metaKey && !e.altKey && e.key === 'Tab') {
+    // ⌃Tab / ⌃⇧Tab cycle through the strip, wrapping.
+    e.preventDefault()
+    const state = tabsState
+    if (state && state.tabs.length > 1) {
+      const at = state.tabs.findIndex((t) => t.docId === state.active)
+      const step = e.shiftKey ? state.tabs.length - 1 : 1
+      const next = state.tabs[(at + step) % state.tabs.length]
+      if (next) window.foolscap.tabActivate(next.docId)
+    }
   } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'e') {
     e.preventDefault()
     if (helpPreview.visible) toggleHelp()
@@ -388,33 +416,108 @@ window.addEventListener('keydown', (e) => {
   }
 })
 
-const markClean = (): void => {
-  dirty = false
-  window.foolscap.setDirty(false)
-  setTitlebar(currentPath, false)
+/* ---- Tab display: swap the visible buffer ---- */
+
+const conflictBarFor = (docId: number): void => {
+  showConflictBar((choice) => {
+    window.foolscap.resolveConflict(docId, choice)
+    const doc = docs.get(docId)
+    if (doc) doc.conflictPending = false
+    editor.view.focus()
+  })
 }
 
-window.foolscap.onLoad((doc) => {
-  hideConflictBar()
-  currentPath = doc.path
-  currentDir = doc.dir
-  editor.replace(doc.content, doc.dir)
-  if (doc.dirty) {
-    // Restored unsaved buffer — arrives already-dirty.
-    dirty = true
-    window.foolscap.setDirty(true)
-    setTitlebar(currentPath, true)
-  } else {
-    markClean()
+function display(docId: number): void {
+  const doc = docs.get(docId)
+  if (!doc || docId === displayedId) return
+  // Leave preview first: its exit dispatch must land in the old buffer.
+  if (preview.visible || previewEntering) exitPreview()
+  const prev = displayedDoc()
+  if (prev) {
+    prev.state = editor.view.state
+    prev.scrollTop = editor.view.scrollDOM.scrollTop
   }
+  displayedId = docId
+  editor.view.setState(doc.state)
+  // Scroll geometry settles a frame after setState.
+  const scrollTop = doc.scrollTop
+  requestAnimationFrame(() => {
+    editor.view.scrollDOM.scrollTop = scrollTop
+  })
+  if (doc.conflictPending) conflictBarFor(docId)
+  else hideConflictBar()
   outline.refresh()
   modes.refresh()
+  editor.view.focus()
+}
+
+/* The strip in the titlebar; hidden when the window has a single tab. */
+const titlebarStrip = document.getElementById('titlebar')
+const tabBar = titlebarStrip
+  ? new TabBar(titlebarStrip, {
+      onActivate: (docId) => window.foolscap.tabActivate(docId),
+      onClose: (docId) => window.foolscap.tabClose(docId),
+      onReorder: (docId, toIndex) => window.foolscap.tabReorder(docId, toIndex),
+      onDetach: (docId, x, y) => window.foolscap.tabDetach(docId, x, y),
+      onNewTab: () => window.foolscap.exec('tab-new')
+    })
+  : null
+
+window.foolscap.onTabs((state) => {
+  tabsState = state
+  tabBar?.update(state)
+  // Tabs main no longer lists are gone for good — drop their buffers.
+  const alive = new Set(state.tabs.map((t) => t.docId))
+  for (const id of [...docs.keys()]) {
+    if (!alive.has(id)) docs.delete(id)
+  }
+  if (displayedId !== null && !alive.has(displayedId)) displayedId = null
+  // Single tab: the quiet centered title. Multiple: the strip takes over.
+  const single = state.tabs.length <= 1
+  setTitlebarVisible(single)
+  if (single) {
+    const tab = state.tabs[0]
+    setTitlebar(tab?.path ?? null, tab?.dirty ?? false)
+  }
+  if (state.active !== displayedId && docs.has(state.active)) display(state.active)
+})
+
+window.foolscap.onLoad((doc) => {
+  const anchor =
+    doc.reason === 'reload' && doc.docId === displayedId
+      ? editor.view.state.selection.main.head
+      : doc.path === null && doc.content === NEW_DOC_TEMPLATE
+        ? NEW_DOC_CURSOR
+        : 0
+  const state = editor.makeState(doc.content, anchor, doc.dir)
+  docs.set(doc.docId, {
+    state,
+    path: doc.path,
+    dir: doc.dir,
+    dirty: doc.dirty,
+    editedSinceContentSent: false,
+    conflictPending: false,
+    scrollTop: 0
+  })
+  if (doc.docId === displayedId) {
+    // A reload of the visible document replaces the buffer in place.
+    hideConflictBar()
+    editor.view.setState(state)
+    outline.refresh()
+    modes.refresh()
+  } else if (displayedId === null || tabsState?.active === doc.docId) {
+    display(doc.docId)
+  }
+  if (doc.docId !== displayedId) return
   // Existing clean documents open in preview; new, empty, or restored-dirty
   // ones go straight to the editor. Double-click (or ⌘E / Escape) edits.
   // Reloads (disk watcher, conflict Reload) never change the mode: staying
   // in the editor is the point, and a visible preview just re-renders.
+  // Transfers (a tab dragged into this window) keep the editor.
   if (doc.reason === 'reload') {
     if (preview.visible) void enterPreview(0)
+  } else if (doc.reason === 'transfer') {
+    exitPreview()
   } else if (!doc.dirty && doc.path && doc.content.trim() !== '') {
     void enterPreview(0)
   } else {
@@ -423,31 +526,34 @@ window.foolscap.onLoad((doc) => {
 })
 
 window.foolscap.onSaved((saved) => {
-  currentPath = saved.path
-  currentDir = saved.dir
-  editor.setDocDir(saved.dir)
-  if (editedSinceContentSent) {
+  const doc = docs.get(saved.docId)
+  if (!doc) return
+  doc.path = saved.path
+  doc.dir = saved.dir
+  if (saved.docId === displayedId) editor.setDocDir(saved.dir)
+  if (doc.editedSinceContentSent) {
     // Edits landed after the save's snapshot: the file is already stale.
     // Stay dirty — and tell main so, since its session cleared its own flag
     // when the write finished.
-    dirty = true
-    window.foolscap.setDirty(true)
-    setTitlebar(currentPath, true)
+    doc.dirty = true
+    window.foolscap.setDirty(saved.docId, true)
   } else {
-    markClean()
+    doc.dirty = false
   }
 })
 
-window.foolscap.onRequestContent(() => {
-  window.foolscap.sendContent(editor.getContent())
-  editedSinceContentSent = false
+window.foolscap.onRequestContent((docId) => {
+  const doc = docs.get(docId)
+  const content =
+    docId === displayedId ? editor.getContent() : (doc?.state.doc.toString() ?? '')
+  window.foolscap.sendContent(docId, content)
+  if (doc) doc.editedSinceContentSent = false
 })
 
-window.foolscap.onConflict(() => {
-  showConflictBar((choice) => {
-    window.foolscap.resolveConflict(choice)
-    editor.view.focus()
-  })
+window.foolscap.onConflict((docId) => {
+  const doc = docs.get(docId)
+  if (doc) doc.conflictPending = true
+  if (docId === displayedId) conflictBarFor(docId)
 })
 
 window.foolscap.onUpdateReady(({ version }) =>
