@@ -24,6 +24,26 @@ export function bestCoveringIndex(positions: readonly number[], pos: number): nu
   return best
 }
 
+/* Index of the span covering (or nearest to) a target line. Ties go to the
+ * later span: document order puts children after their parents, so nested
+ * elements resolve to the most specific one under the line. */
+export function nearestSpanIndex(
+  spans: readonly { top: number; bottom: number }[],
+  target: number
+): number {
+  let best = -1
+  let bestDist = Infinity
+  spans.forEach((span, i) => {
+    const dist =
+      target < span.top ? span.top - target : target > span.bottom ? target - span.bottom : 0
+    if (dist <= bestDist) {
+      bestDist = dist
+      best = i
+    }
+  })
+  return best
+}
+
 /* Preview mode: the document rendered by THE export pipeline — what you
  * preview is exactly what HTML and PDF export produce. Read-only by nature;
  * double-clicking any element drops back into the editor at that element's
@@ -146,6 +166,20 @@ export class Preview {
   hide(): void {
     this.el.hidden = true
     this.visible = false
+  }
+
+  /* Source position of the content at the pane's viewport center, so
+   * leaving preview (⌘E, Escape) lands the editor where the reader was —
+   * not wherever the editor last sat. Read before hide(): a hidden pane
+   * has no geometry. */
+  visiblePos(): number {
+    const center = this.el.getBoundingClientRect().top + this.el.clientHeight / 2
+    const candidates = [...this.el.querySelectorAll<HTMLElement>('[data-pos]')]
+    const spans = candidates
+      .map((c) => c.getBoundingClientRect())
+      .map((r) => ({ top: r.top, bottom: r.bottom }))
+    const best = candidates[nearestSpanIndex(spans, center)]
+    return best ? Number(best.dataset['pos']) : 0
   }
 
   /* ---- table columns: proportioned by the model, draggable at edges ---- */

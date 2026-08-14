@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bestCoveringIndex } from './preview'
+import { bestCoveringIndex, nearestSpanIndex } from './preview'
 
 describe('bestCoveringIndex', () => {
   it('picks the largest stamp at or below the target', () => {
@@ -18,5 +18,32 @@ describe('bestCoveringIndex', () => {
 
   it('skips unstamped elements (NaN)', () => {
     expect(bestCoveringIndex([0, NaN, 80], 90)).toBe(2)
+  })
+})
+
+describe('nearestSpanIndex', () => {
+  const spans = [
+    { top: 0, bottom: 100 },
+    { top: 100, bottom: 240 },
+    { top: 260, bottom: 400 }
+  ]
+
+  it('picks the span covering the target line', () => {
+    expect(nearestSpanIndex(spans, 150)).toBe(1)
+  })
+
+  it('picks the nearest span when the target falls in a gap', () => {
+    expect(nearestSpanIndex(spans, 245)).toBe(1)
+    expect(nearestSpanIndex(spans, 255)).toBe(2)
+  })
+
+  it('ties go to the later span, so nested elements win over parents', () => {
+    // A parent covering [0, 400] listed before its child covering [100, 240].
+    const nested = [{ top: 0, bottom: 400 }, ...spans]
+    expect(nearestSpanIndex(nested, 150)).toBe(2)
+  })
+
+  it('returns -1 on empty input', () => {
+    expect(nearestSpanIndex([], 50)).toBe(-1)
   })
 })
