@@ -1,0 +1,61 @@
+# Changelog
+
+This fork of [seamoss/Foolscap](https://github.com/seamoss/Foolscap) adds
+layout and multi-document features on top of upstream. Upstream's rule that
+the buffer is always plain markdown text is preserved throughout — every
+feature below round-trips through standard GFM.
+
+## 0.11.0 — 2026-08-14
+
+Forked from upstream v0.10.1.
+
+### Tabs and multiple windows
+
+- One window now holds many documents. The tab strip lives in the titlebar
+  and disappears entirely for single-document windows, which look exactly
+  as before.
+- **⌘T** opens a tab, **⌘W** closes one (the window when it's the last),
+  **⇧⌘W** closes the window, **⌃Tab / ⌃⇧Tab** cycle. Click to switch, drag
+  horizontally to reorder.
+- **Drag a tab out** — pull it past the strip and release — and it becomes
+  its own window at the drop point. The buffer, undo history, dirty flag,
+  and disk watcher all travel with it.
+- Opening a file lands as a tab in the window that was last in focus; a
+  file that's already open anywhere activates its existing tab instead of
+  duplicating.
+- Closing a window walks a save prompt through every dirty tab.
+- ⌘Q session persistence remembers windows *and* their tabs (older
+  single-document sessions migrate automatically).
+
+### Resizable table columns
+
+- A column's width is recorded as the dash run in its delimiter row —
+  still a perfectly standard GFM table everywhere, and the width travels
+  with the file. Minimal hand-typed delimiters (`---`, `:---:`) carry no
+  intent and size by content, unchanged.
+- **In preview (⌘E):** tables lay out with columns proportioned by their
+  recorded widths. Hover a column boundary for the resize cursor and drag
+  to redistribute the two neighbors; a column narrower than its content
+  wraps. Resizes write back to the markdown source.
+- **In the editor:** every pipe is a grab handle (col-resize cursor, drags
+  in character steps), and the table chip bar gains ⇤ / ⇥ narrow/widen
+  buttons.
+
+### Layout
+
+- The text column tracks the window width instead of the fixed 68ch cap,
+  keeping a `min(6rem, 5vw)` margin at each edge. Exports keep the fixed
+  measure — print has no window to track.
+
+### Fixes
+
+- Leaving preview (⌘E, Escape) lands the editor on the content you were
+  scrolled to, cursor placed and centered — not at the top of the
+  document. (Double-click already did this; now every exit path does.)
+
+### Fork housekeeping
+
+- The background auto-updater is off: it would poll the upstream feed
+  unprompted and auto-download upstream releases over this fork's
+  features. The manual "Check for Updates" stays. Opt the background
+  updater back in with `FOOLSCAP_AUTO_UPDATE=1`.
