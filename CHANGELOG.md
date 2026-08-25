@@ -5,6 +5,22 @@ layout and multi-document features on top of upstream. Upstream's rule that
 the buffer is always plain markdown text is preserved throughout — every
 feature below round-trips through standard GFM.
 
+## 0.14.0 — 2026-08-25
+
+### Double-click in preview lands the cursor on the clicked word
+
+- Double-clicking a rendered block used to drop the cursor at the block's
+  first character. The click point now maps back to the exact source offset:
+  the clicked word is found in the markdown by whole-word occurrence, past
+  whatever syntax the preview hides (`**` marks, link URLs, heading `#`s),
+  and the cursor lands mid-word right where you clicked.
+- The page-hold from 0.13.2 sharpened with it: the *clicked line* keeps its
+  screen height, not just the block — a wrapped paragraph no longer shifts
+  by the lines above the click.
+- When the word can't be found in the source (say it's assembled from
+  pieces, like `win**ning**`), the exit falls back to the block start as
+  before.
+
 ## 0.13.2 — 2026-08-25
 
 ### Leaving preview no longer jumps the page
