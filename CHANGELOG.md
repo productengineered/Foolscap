@@ -5,6 +5,19 @@ layout and multi-document features on top of upstream. Upstream's rule that
 the buffer is always plain markdown text is preserved throughout — every
 feature below round-trips through standard GFM.
 
+## 0.13.2 — 2026-08-25
+
+### Leaving preview no longer jumps the page
+
+- Double-clicking a block in preview used to center that block's first line
+  in the editor, so the text leapt to the middle of the window and you had
+  to find your place again. The clicked element's on-screen height now rides
+  along with the exit: its line lands where the element was, and the page
+  holds still under the click.
+- ⌘E and Escape get the same treatment — the block at the viewport center
+  used to be re-centered on its *first* line (a jump, for any block taller
+  than one line); it now stays at the height it was on screen.
+
 ## 0.13.1 — 2026-08-14
 
 ### The title bar has room to breathe
