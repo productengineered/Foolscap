@@ -5,6 +5,19 @@ layout and multi-document features on top of upstream. Upstream's rule that
 the buffer is always plain markdown text is preserved throughout — every
 feature below round-trips through standard GFM.
 
+## 0.14.1 — 2026-08-25
+
+### ⌘F works everywhere, not just with the editor focused
+
+- ⌘F was bound only inside CodeMirror, so it did nothing in preview mode —
+  including right after opening a file, which lands in preview. A global
+  handler now catches ⌘F anywhere (preview, help, outline), leaves whatever
+  overlay is up, and opens Find & Replace — same as the palette's
+  Find & Replace entry always did.
+- Pressing ⌘F with the panel already open now refocuses and reselects the
+  query (and seeds it from the current selection), instead of silently
+  doing nothing.
+
 ## 0.14.0 — 2026-08-25
 
 ### Double-click in preview lands the cursor on the clicked word
