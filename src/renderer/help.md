@@ -38,7 +38,8 @@ Everything lives in the command palette — press `⌘K` and type.
 | `⌘F` | Find & replace, regex optional |
 | `⌘B` / `⌘I` | Bold / italic (`⇧⌘X` strike, `⇧⌘C` code, `⇧⌘K` link) |
 | `⇧⌘O` | Outline panel — headings, click to jump |
-| `⌘N` | New window — every document gets its own |
+| `⌘N` | New window |
+| `⌘T` | New tab — documents can share a window; drag a tab out to split |
 | `⌘O` | Open a file (or just drop one on the window) |
 | `⌘S` | Save (atomic: your file is never half-written; autosave does this for you) |
 | `⌘P` | Print |
@@ -93,9 +94,10 @@ the mouse.
 
 ## Leaving
 
-- `⌘W` closes a window — a saved document quietly writes itself on the
-  way out (that's autosave); only untitled work, or a document autosave
-  can't safely write, gets **asked** about.
+- `⌘W` closes a tab — the window, when it's the last one. A saved
+  document quietly writes itself on the way out (that's autosave); only
+  untitled work, or a document autosave can't safely write, gets
+  **asked** about.
 - `⌘Q` quits **silently** — files are flushed, and every open window,
   including unsaved drafts, is remembered and comes back the next time
   you open Foolscap. Quitting is just stepping away from the desk.
