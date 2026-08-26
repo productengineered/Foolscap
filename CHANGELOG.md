@@ -5,6 +5,33 @@ layout and multi-document features on top of upstream. Upstream's rule that
 the buffer is always plain markdown text is preserved throughout — every
 feature below round-trips through standard GFM.
 
+## 0.15.0 — 2026-08-26
+
+### Autosave, version history, and undo that survives a restart
+
+- **Autosave** (on by default; Settings ▸ Saving turns it off). A saved
+  document writes itself: ~1.5s after typing pauses, every 30s through an
+  unbroken burst, and immediately when the tab, window, or app leaves the
+  foreground. Closing a file-backed tab just saves instead of asking, and
+  ⌘Q flushes every file before persisting the session. Untitled documents
+  are untouched — they still live as drafts until a deliberate first save.
+  Autosave never writes over an unresolved external change (the conflict
+  bar keeps the last word), and a failing disk toasts once, not per
+  keystroke.
+- **Version history** (File ▸ Browse Versions…, also in the palette).
+  Autosave removes "just don't save" as the undo of last resort, so
+  Foolscap now keeps full snapshots of each document in its app data —
+  never beside your files, never synced anywhere. The first save of a
+  session snapshots the file *as you found it* before anything overwrites
+  it; further snapshots land at most every 5 minutes, and old ones thin
+  out Time-Machine style (hourly for a day, daily for a month, weekly
+  beyond). The browser lists times, shows any snapshot, and Restore
+  replaces the buffer as a single edit — ⌘Z undoes a restore like any
+  other change; the disk only moves when the normal save path runs.
+- **Persistent undo.** The undo stack now rides along with the persisted
+  session and with tabs dragged to another window, so after a quit-and-
+  relaunch ⌘Z still walks back through the previous session's edits.
+
 ## 0.14.1 — 2026-08-25
 
 ### ⌘F works everywhere, not just with the editor focused
