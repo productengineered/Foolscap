@@ -5,6 +5,16 @@ layout and multi-document features on top of upstream. Upstream's rule that
 the buffer is always plain markdown text is preserved throughout — every
 feature below round-trips through standard GFM.
 
+## 0.16.0 — 2026-08-31
+
+### Line numbers
+
+- **Line numbers** (off by default — Settings ▸ Writing, View ▸ Toggle
+  Line Numbers, or the palette). Quiet mono ordinals in the margin, one
+  per source line: a wrapped paragraph keeps its single number, and the
+  block-glyph column keeps its place beside the text. Editor only — the
+  preview renders blocks, not source lines, so it stays a clean page.
+
 ## 0.15.0 — 2026-08-26
 
 ### Autosave, version history, and undo that survives a restart
