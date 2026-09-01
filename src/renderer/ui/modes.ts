@@ -1,5 +1,6 @@
 import { EditorView, type ViewUpdate } from '@codemirror/view'
 import { lineNumbersOn, setLineNumbers, syncLineNumbers } from '../editor/line-numbers'
+import { setTableGrid, syncTableGrid, tableGridOn } from '../editor/live-preview/table-grid'
 import { tokenMs } from './tokens'
 
 /* Writing modes and the theme switch. All toggles, no chrome (§4.4):
@@ -251,6 +252,14 @@ export class Modes {
     setLineNumbers(this.view, !lineNumbersOn())
   }
 
+  get tableGrid(): boolean {
+    return tableGridOn()
+  }
+
+  toggleTableGrid(): void {
+    setTableGrid(this.view, !tableGridOn())
+  }
+
   handleUpdate(update: ViewUpdate): void {
     if (!update.docChanged) return
     if (this.typewriter) {
@@ -264,8 +273,9 @@ export class Modes {
   refresh(): void {
     this.recount()
     // Tab switches swap whole states in with setState; one built before the
-    // user toggled line numbers carries the stale choice.
+    // user toggled line numbers or the table grid carries the stale choice.
     syncLineNumbers(this.view)
+    syncTableGrid(this.view)
   }
 
   private center(): void {

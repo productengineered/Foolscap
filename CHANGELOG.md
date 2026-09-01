@@ -5,6 +5,26 @@ layout and multi-document features on top of upstream. Upstream's rule that
 the buffer is always plain markdown text is preserved throughout — every
 feature below round-trips through standard GFM.
 
+## 0.17.0 — 2026-09-01
+
+### Tables are tables now
+
+- **Table grid** (on by default — Settings ▸ Writing, View ▸ Toggle Table
+  Grid, or the palette). A pipe table renders as an actual table —
+  hairline borders, sunk header, alignment and drag-recorded widths
+  honored — and you edit it like one: click a cell and type, right there.
+  Commits are spreadsheet-style: the document updates in one undo step
+  when you leave the cell — `Tab`/`Shift-Tab` walk cells (past the end
+  adds a row), `Enter` moves down a column (adding a row on the last),
+  `Escape` cancels, clicking away commits. Arrow in from above or below
+  to start editing at the edge. Typed pipes are escaped, pasted rich text
+  flattens to plain, and every commit writes the table back tidied. The
+  buffer never stops being plain markdown — the grid is a costume over
+  the text, drawn by the same table model that formats it. **⌥-click**
+  any cell to drop into the raw pipe source at that exact character (the
+  hover column controls and pipe-dragging live there, unchanged); quoted
+  tables always render as source.
+
 ## 0.16.0 — 2026-08-31
 
 ### Line numbers
