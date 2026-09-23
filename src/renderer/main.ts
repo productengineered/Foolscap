@@ -678,8 +678,13 @@ function display(docId: number): void {
   outline.refresh()
   modes.refresh()
   editor.view.focus()
-  // Back in the mode this tab was left in, at the place it was left.
+  // Back in the mode this tab was left in, at the place it was left. The
+  // editor hides now, in the same task as the swap, so this tab's source
+  // never paints while its preview renders: a return to it is served from
+  // the render cache before the next frame, a first visit shows bare paper
+  // for the length of one render. A failed render brings the editor back.
   if (doc.previewing) {
+    document.documentElement.classList.add('previewing')
     const at = doc.position?.head ?? doc.state.selection.main.head
     void enterPreview(Math.min(at, doc.state.doc.length))
   }
@@ -796,6 +801,8 @@ window.foolscap.onLoad((doc) => {
   if (doc.reason === 'reload') {
     if (preview.visible) void enterPreview(0)
   } else if (previewing) {
+    // As on a tab switch: the source never paints on its way to preview.
+    document.documentElement.classList.add('previewing')
     void enterPreview(remembered ? Math.min(remembered.head, doc.content.length) : 0)
   } else {
     exitPreview()
