@@ -104,6 +104,11 @@ interface OpenDoc {
   /* Where the reader was when this tab left the foreground — what a
    * background tab reports when main asks at quit. */
   position: DocPosition | null
+  /* Preview or editor — each tab keeps its own. Set by the open rule, then
+   * only by the user (⌘E, double-click, Escape, …); read back when the tab
+   * returns to the foreground. For the displayed tab the live pane is the
+   * truth; this is written when it leaves. */
+  previewing: boolean
 }
 
 const docs = new Map<number, OpenDoc>()
@@ -656,9 +661,11 @@ function display(docId: number): void {
   // The outgoing document's pending autosave fires now, not mid-way through
   // reading the next tab.
   if (displayedId !== null) autosaveScheduler.flush(displayedId)
+  const prev = displayedDoc()
+  // The outgoing tab's mode goes with it, to come back as it was left.
+  if (prev) prev.previewing = preview.visible || previewEntering
   // Leave preview first: its exit dispatch must land in the old buffer.
   if (preview.visible || previewEntering) exitPreview()
-  const prev = displayedDoc()
   if (prev) {
     prev.state = editor.view.state
     prev.scrollTop = editor.view.scrollDOM.scrollTop
@@ -671,6 +678,11 @@ function display(docId: number): void {
   outline.refresh()
   modes.refresh()
   editor.view.focus()
+  // Back in the mode this tab was left in, at the place it was left.
+  if (doc.previewing) {
+    const at = doc.position?.head ?? doc.state.selection.main.head
+    void enterPreview(Math.min(at, doc.state.doc.length))
+  }
 }
 
 /* A first display lands the remembered top line at the top of the view;
@@ -738,6 +750,21 @@ window.foolscap.onLoad((doc) => {
           ? NEW_DOC_CURSOR
           : 0
   const state = editor.makeState(doc.content, anchor, doc.dir, doc.history ?? null)
+  // Existing clean documents open in preview; new, empty, or restored-dirty
+  // ones go straight to the editor. Double-click (or ⌘E / Escape) edits.
+  // Reloads (disk watcher, conflict Reload) never change the mode: staying
+  // in the editor is the point, and a visible preview just re-renders.
+  // Transfers (a tab dragged into this window) keep the editor. Decided
+  // here, not on display, so a tab opened in the background keeps it too.
+  const before = docs.get(doc.docId)
+  const previewing =
+    doc.reason === 'reload'
+      ? doc.docId === displayedId
+        ? preview.visible || previewEntering
+        : (before?.previewing ?? false)
+      : doc.reason === 'transfer'
+        ? false
+        : !doc.dirty && doc.path !== null && doc.content.trim() !== ''
   const opened: OpenDoc = {
     state,
     path: doc.path,
@@ -747,7 +774,8 @@ window.foolscap.onLoad((doc) => {
     conflictPending: false,
     scrollTop: 0,
     restoreTop: remembered?.top ?? null,
-    position: remembered
+    position: remembered,
+    previewing
   }
   docs.set(doc.docId, opened)
   if (doc.docId === displayedId) {
@@ -760,19 +788,14 @@ window.foolscap.onLoad((doc) => {
     outline.refresh()
     modes.refresh()
   } else if (displayedId === null || tabsState?.active === doc.docId) {
+    // display() puts the tab in its mode.
     display(doc.docId)
+    return
   }
   if (doc.docId !== displayedId) return
-  // Existing clean documents open in preview; new, empty, or restored-dirty
-  // ones go straight to the editor. Double-click (or ⌘E / Escape) edits.
-  // Reloads (disk watcher, conflict Reload) never change the mode: staying
-  // in the editor is the point, and a visible preview just re-renders.
-  // Transfers (a tab dragged into this window) keep the editor.
   if (doc.reason === 'reload') {
     if (preview.visible) void enterPreview(0)
-  } else if (doc.reason === 'transfer') {
-    exitPreview()
-  } else if (!doc.dirty && doc.path && doc.content.trim() !== '') {
+  } else if (previewing) {
     void enterPreview(remembered ? Math.min(remembered.head, doc.content.length) : 0)
   } else {
     exitPreview()
