@@ -665,6 +665,7 @@ export class WindowSession {
   private pendingPaths: string[] = []
   private pendingRestore: WindowEntry | null = null
   private pendingHelp = false
+  private pendingNotices: string[] = []
   private pendingAdopt: {
     tab: TabSession
     content: string
@@ -695,6 +696,9 @@ export class WindowSession {
       if (this.pendingHelp) {
         this.pendingHelp = false
         this.window.webContents.send(IPC.command, 'show-help')
+      }
+      for (const message of this.pendingNotices.splice(0)) {
+        this.window.webContents.send(IPC.notice, message)
       }
     })
     window.on('close', (e) => {
@@ -984,6 +988,13 @@ export class WindowSession {
     } else {
       this.pendingHelp = true
     }
+  }
+
+  /* A toast in this window, once the renderer can receive it. */
+  notify(message: string): void {
+    if (this.window.isDestroyed()) return
+    if (this.ready) this.window.webContents.send(IPC.notice, message)
+    else this.pendingNotices.push(message)
   }
 
   /* Walk every dirty tab; any Cancel aborts the whole close. */
