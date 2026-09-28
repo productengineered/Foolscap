@@ -680,10 +680,10 @@ export class WindowSession {
     this.updateTitle()
     window.webContents.once('did-finish-load', () => {
       this.ready = true
-      if (this.pendingRestore) {
-        const entry = this.pendingRestore
+      const restoring = this.pendingRestore
+      if (restoring) {
         this.pendingRestore = null
-        void this.restore(entry)
+        void this.restore(restoring)
       }
       if (this.pendingAdopt) {
         const adopt = this.pendingAdopt
@@ -691,8 +691,10 @@ export class WindowSession {
         this.finishAdopt(adopt.tab, adopt.content, adopt.dirty, adopt.history)
       }
       for (const path of this.pendingPaths.splice(0)) void this.openPath(path)
-      // A window that arrived with nothing to show opens an untitled tab.
-      if (this.tabs.length === 0) this.newTab()
+      // A window that arrived with nothing to show opens an untitled tab. A
+      // restore adds its tabs a tick later (it queues behind opens), so it
+      // counts as something to show.
+      if (this.tabs.length === 0 && !restoring) this.newTab()
       if (this.pendingHelp) {
         this.pendingHelp = false
         this.window.webContents.send(IPC.command, 'show-help')
@@ -798,11 +800,20 @@ export class WindowSession {
     await this.openPath(picked)
   }
 
-  async restore(entry: WindowEntry): Promise<void> {
+  /* Restores queue with opens: a file arriving on a cold launch (Finder, a
+   * foolscap:// link) lands after the saved tabs and stays the active one,
+   * instead of the restore's saved active tab taking over mid-open. */
+  restore(entry: WindowEntry): Promise<void> {
     if (!this.ready) {
       this.pendingRestore = entry
-      return
+      return Promise.resolve()
     }
+    const run = this.opening.then(() => this.restoreNow(entry))
+    this.opening = run.catch(() => undefined)
+    return run
+  }
+
+  private async restoreNow(entry: WindowEntry): Promise<void> {
     for (const tabEntry of entry.tabs) {
       const tab = new TabSession(this)
       this.tabs.push(tab)
