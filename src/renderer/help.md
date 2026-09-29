@@ -56,10 +56,12 @@ Double-click anywhere to drop into the editor exactly there. `⌘E` or
 
 - **Tables** — a table shows as an actual grid, and you edit it like one:
   click a cell and type. `Tab` walks cells, `Enter` moves down a column
-  (each adds a row at the edge), `Escape` cancels; the file updates as
-  you move, always tidied. `⌥`-click a cell for the raw pipes — that's
-  where hovering shows column controls and pipe edges drag. Settings ▸
-  Writing turns the grid off entirely.
+  (each adds a row at the edge), `⇧Enter` breaks a line inside the cell
+  (a `<br>` in the file — the one line break a pipe table can hold),
+  `Escape` cancels; the file updates as you move, always tidied.
+  `⌥`-click a cell for the raw pipes — that's where hovering shows column
+  controls and pipe edges drag. Settings ▸ Writing turns the grid off
+  entirely.
 - **Images** — paste a screenshot, or drop a picture from Finder; it lands
   in an `assets/` folder next to your document with a relative link (a
   dropped file keeps its name). Arrow into an image to see its markdown;
@@ -92,8 +94,10 @@ Double-click anywhere to drop into the editor exactly there. `⌘E` or
   clipboard the way preview renders it — paste into Google Docs, Word, or
   a CMS and the tables, code, and quotes arrive formatted. Plain-text
   destinations get the markdown itself.
-- **Reveal in Finder** and **Copy Path** live in the File menu and `⌘K`;
-  the window has no proxy icon to drag, so these are the way out.
+- **Reveal in Finder** and **Copy Path** live in the File menu and `⌘K`,
+  and `⌘`-click the document's name in the title strip (or its tab) for
+  the path menu — the file and every folder above it, each opening in
+  Finder. The window has no proxy icon to drag, so these are the way out.
 
 ## Appearance
 

@@ -179,6 +179,7 @@ export const IPC = {
   tabClose: 'tabs:close',
   tabReorder: 'tabs:reorder',
   tabDetach: 'tabs:detach',
+  pathMenu: 'file:path-menu',
   // main → renderer
   command: 'menu:command',
   load: 'doc:load',
@@ -246,6 +247,9 @@ export interface FoolscapApi {
   tabReorder(docId: number, toIndex: number): void
   /* Drag-out: detach the tab into its own window at screen coordinates. */
   tabDetach(docId: number, screenX: number, screenY: number): void
+  /* ⌘-click on the document's name: the path menu for that tab's file
+   * (null = the active tab). */
+  showPathMenu(docId: number | null): void
   onLoad(cb: (doc: DocPayload) => void): void
   onTabs(cb: (state: TabsState) => void): void
   onCommand(cb: (command: MenuCommand) => void): void

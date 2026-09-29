@@ -52,6 +52,10 @@ body {
   white-space: nowrap;
   /* Keep clear of the traffic lights on either side. */
   max-width: calc(100% - 12rem);
+  /* Clickable (⌘-click shows the path menu), so the name itself can't
+   * drag the window; the rest of the strip still does. */
+  -webkit-app-region: no-drag;
+  cursor: default;
 }
 
 .titlebar-dirty {
@@ -73,6 +77,13 @@ body {
   align-items: center;
   gap: 0.25rem;
   overflow: hidden;
+}
+
+/* display: flex above would beat the [hidden] attribute the tab bar sets
+ * for a single document, leaving an empty strip stretched over the title
+ * — invisible, but first in line for every click meant for the name. */
+.tabbar[hidden] {
+  display: none;
 }
 
 .tab {
@@ -612,9 +623,19 @@ body {
   border: 1px solid var(--rule);
   padding: 0.35em 0.7em;
   text-align: left;
-  /* Tables lay out fixed with draggable column ratios; long unbroken
-   * content (IDs, URLs) must wrap inside its column, not overflow it. */
+  min-width: var(--table-cell-min-width);
+  /* Auto layout keeps a column at least as wide as its longest word (an
+   * ID never breaks mid-token); break-word is the fallback for anything
+   * wider than the column can be. */
   overflow-wrap: break-word;
+}
+
+/* A cell holding a URL-length token (table-model hasLongToken) may break
+ * it anywhere: its column keeps a word-sized floor from the other cells
+ * instead of growing to the token and pushing the table off the page. */
+.preview-doc td.fs-cell-breakable,
+.preview-doc th.fs-cell-breakable {
+  overflow-wrap: anywhere;
 }
 
 .preview-doc th {

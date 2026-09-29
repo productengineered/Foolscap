@@ -136,27 +136,45 @@ const editorTheme = EditorView.theme({
     padding: 'var(--space-paragraph) 0',
     cursor: 'text'
   },
+  /* Auto layout, not fixed: the colgroup's percentages carry the model's
+   * proportions, but no column is ever squeezed below its longest word.
+   * Fixed layout let a three-character ID column shrink to a sliver and
+   * break "R01" letter by letter once its neighbours held long prose. */
   '.fs-table-grid table': {
     borderCollapse: 'collapse',
-    width: '100%',
-    tableLayout: 'fixed'
+    width: '100%'
   },
   '.fs-table-grid th, .fs-table-grid td': {
     border: '1px solid var(--rule)',
     padding: 'var(--pad-table-cell)',
     textAlign: 'left',
-    overflowWrap: 'break-word'
+    minWidth: 'var(--table-cell-min-width)',
+    overflowWrap: 'break-word',
+    // CodeMirror's .cm-lineWrapping sets word-break: break-word, which the
+    // cells would inherit — and which makes every character a break
+    // opportunity, so a column's minimum width computes to nothing and the
+    // floor above is lost. Normal word breaking restores it.
+    wordBreak: 'normal'
+  },
+  /* A cell holding a URL-length token (table-model hasLongToken) may break
+   * it anywhere: its column keeps a word-sized floor from the other cells
+   * instead of growing to the token and pushing the table off the page. */
+  '.fs-table-grid .fs-cell-breakable': {
+    overflowWrap: 'anywhere'
   },
   '.fs-table-grid th': {
     fontWeight: 'var(--weight-ui)',
     background: 'var(--paper-sunk)'
   },
   /* The cell being edited in place: an inset ring (outline-offset pulls it
-   * inward) so focusing a cell never shifts layout. */
+   * inward) so focusing a cell never shifts layout. pre-wrap: plaintext
+   * editing breaks a line (Shift-Enter) with a newline character, and it
+   * has to show as a new line while typing, before it commits as <br>. */
   '.fs-table-grid .fs-editing-cell': {
     outline: 'var(--table-edit-ring) solid var(--accent)',
     outlineOffset: 'calc(-1 * var(--table-edit-ring))',
-    caretColor: 'var(--accent)'
+    caretColor: 'var(--accent)',
+    whiteSpace: 'pre-wrap'
   },
 
   /* ---- Blockquotes: sunk paper fill ---- */

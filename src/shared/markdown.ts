@@ -4,13 +4,10 @@ import rehypeStringify from 'rehype-stringify'
 import remarkGfm from 'remark-gfm'
 import remarkParse from 'remark-parse'
 import remarkRehype from 'remark-rehype'
-import {
-  createCssVariablesTheme,
-  createHighlighter,
-  createJavaScriptRegexEngine,
-  type Highlighter
-} from 'shiki'
+import { createCssVariablesTheme, createBundledHighlighter, type HighlighterGeneric } from 'shiki/core'
+import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
 import { unified } from 'unified'
+import { GRAMMARS, type GrammarName } from './grammars'
 
 /* THE one markdown pipeline (ULTRAPLAN §3.1 corollary, CLAUDE.md second
  * rule). HTML export and PDF export both render through here — never a
@@ -25,6 +22,17 @@ export const shikiTheme = createCssVariablesTheme({
   fontStyle: true
 })
 
+export type Highlighter = HighlighterGeneric<GrammarName, string>
+
+/* Shiki's bundle factory over Foolscap's own grammar set (grammars.ts)
+ * rather than the full bundle: names resolve against that set, so the
+ * build carries those grammars and no others. */
+const createHighlighter = createBundledHighlighter<GrammarName, string>({
+  langs: GRAMMARS,
+  themes: {},
+  engine: () => createJavaScriptRegexEngine({ forgiving: true })
+})
+
 let highlighterPromise: Promise<Highlighter> | null = null
 
 /* One highlighter per process, shared by this pipeline and the editor's
@@ -34,11 +42,7 @@ let highlighterPromise: Promise<Highlighter> | null = null
  * fetching WASM and registering ~220 grammars up front. Here nothing
  * loads until a fence actually names a language. */
 export function getHighlighter(): Promise<Highlighter> {
-  highlighterPromise ??= createHighlighter({
-    themes: [shikiTheme],
-    langs: [],
-    engine: createJavaScriptRegexEngine({ forgiving: true })
-  })
+  if (!highlighterPromise) highlighterPromise = createHighlighter({ themes: [shikiTheme], langs: [] })
   return highlighterPromise
 }
 
@@ -66,11 +70,43 @@ function rehypeSourcePositions() {
   }
 }
 
+/* Minimal structural view of an mdast node — enough to retype one kind of
+ * node without pulling in @types/mdast. */
+interface MdastNode {
+  type: string
+  value?: string
+  children?: MdastNode[]
+}
+
+const BR_HTML = /^<br\s*\/?>$/i
+
+/* A literal <br> is a line break. Raw HTML otherwise stays out of the
+ * output (nothing here passes it through), but this one tag is the only
+ * line break a pipe table can hold — a newline ends the row — so the
+ * editor's grid types it on Shift-Enter, and GitHub reads it the same
+ * way. The node is retyped in place: remark-rehype renders `break` as
+ * <br>, exactly like a hard line break. */
+function remarkBrTags() {
+  return (tree: MdastNode): void => {
+    const walk = (node: MdastNode): void => {
+      for (const child of node.children ?? []) {
+        if (child.type === 'html' && child.value !== undefined && BR_HTML.test(child.value)) {
+          child.type = 'break'
+          delete child.value
+        }
+        walk(child)
+      }
+    }
+    walk(tree)
+  }
+}
+
 async function buildProcessor(sourcePositions: boolean) {
   const highlighter = await getHighlighter()
   const base = unified()
     .use(remarkParse)
     .use(remarkGfm)
+    .use(remarkBrTags)
     .use(remarkRehype)
     .use(rehypeSlug)
   const positioned = sourcePositions ? base.use(rehypeSourcePositions) : base
